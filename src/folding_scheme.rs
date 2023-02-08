@@ -27,10 +27,16 @@ pub struct PublicParameters<
     pub commit_key_selectors_and_slack: CommS::CommitKey,
 }
 
+/// The verifier key for the PLONK folding scheme. Contains a commitment to the q_C selector (constant)
 pub struct VerifierKey<F: PrimeField, CommS: HomomorphicCommitmentScheme<F>> {
     pub selector_c_commitment: CommS::Commitment,
 }
 
+/// Prover key for the PLONK folding scheme. Contains:
+/// - a commitment to the q_C selector (as the verifier key)
+/// - a description of the circuit (needed to compute cross terms)
+/// - commitment parameters (as the public parameters)
+/// - the randomness that was used to commit to q_C
 pub struct ProverKey<
     F: PrimeField,
     CommS: HomomorphicCommitmentScheme<F>,
@@ -50,8 +56,8 @@ where
 {
     type PublicParameters = PublicParameters<F, CommS, CommW>;
     type Structure = PLONKCircuit;
-    type Instance = RelaxedPLONKInstance;
-    type Witness = RelaxedPLONKWitness;
+    type Instance = RelaxedPLONKInstance<F>;
+    type Witness = RelaxedPLONKWitness<F>;
     type ProverKey = ProverKey<F, CommS, CommW>;
     type VerifierKey = VerifierKey<F, CommS>;
     type ProverMessage = CommS::Commitment;

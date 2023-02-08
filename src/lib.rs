@@ -4,7 +4,7 @@
 //! compress the IVC proofs.
 
 /// Interface for an IVC scheme.
-pub trait IVC<F: PrimeField> {
+pub trait IVC<F: PrimeField, SC: StepCircuit<F>> {
     /// Public parameters for the IVC scheme.
     type PublicParameters;
 
@@ -21,14 +21,14 @@ pub trait IVC<F: PrimeField> {
     fn setup<R: Rng>(rng: &mut R) -> Self::PublicParameters;
 
     /// Run the IVC encoder to produce a proving key and a verifying key.
-    fn encode<R: Rng, SC: StepCircuit<F>>(
+    fn encode<R: Rng>(
         public_parameters: &Self::PublicParameters,
         step_circuit: &SC,
         rng: &mut R,
     ) -> Result<(Self::ProverKey, Self::VerifierKey), SangriaError>;
 
     /// Prove a step of the IVC computation. Consume the current state and proof and produce the *next* state and proof.
-    fn prove_step<SC: StepCircuit<F>>(
+    fn prove_step(
         prover_key: &Self::ProverKey,
         origin_state: &SC::State,
         current_state: SC::State,
@@ -37,7 +37,7 @@ pub trait IVC<F: PrimeField> {
     ) -> Result<(SC::State, Self::Proof), SangriaError>;
 
     /// Verify a step of the IVC computation.
-    fn verify<SC: StepCircuit<F>>(
+    fn verify(
         verifier_key: &Self::VerifierKey,
         origin_state: &SC::State,
         current_state: SC::State,
@@ -46,7 +46,7 @@ pub trait IVC<F: PrimeField> {
 }
 
 /// A marker trait for an IVC scheme which implements proof compression.
-pub trait IVCWithProofCompression<F: PrimeField>: IVC<F> {}
+pub trait IVCWithProofCompression<F: PrimeField, SC: StepCircuit<F>>: IVC<F, SC> {}
 
 /// Interface for a single step of the incremental computation.
 pub trait StepCircuit<F: PrimeField> {
