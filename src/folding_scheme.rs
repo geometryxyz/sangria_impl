@@ -8,28 +8,29 @@ use crate::{
 };
 
 /// A folding scheme for relaxed PLONK
-pub struct PLONKFoldingScheme<
-    F: PrimeField,
-    CommS: HomomorphicCommitmentScheme<F>,
-    CommW: HomomorphicCommitmentScheme<F>,
->(PhantomData<(F, CommS, CommW)>);
+pub struct PLONKFoldingScheme<F: PrimeField, Comm: FoldingCommitmentConfig<F>>(
+    PhantomData<(F, Comm)>,
+);
+
+pub trait FoldingCommitmentConfig<F: PrimeField> {
+    type CommitmentSlack: HomomorphicCommitmentScheme<F>;
+    type CommitmentWitness: HomomorphicCommitmentScheme<F>;
+}
 
 /// Public parameters for the folding scheme. Contains size parameters for the PLONK circuits
 /// and commitment parameters for vectors of sizes `number_of_gates` and `number_of_public_inputs + number_of_gates + 1`
-pub struct PublicParameters<
-    F: PrimeField,
-    CommS: HomomorphicCommitmentScheme<F>,
-    CommW: HomomorphicCommitmentScheme<F>,
-> {
+pub struct PublicParameters<F: PrimeField, Comm: FoldingCommitmentConfig<F>> {
     pub number_of_public_inputs: usize,
     pub number_of_gates: usize,
-    pub commit_key_witness: CommW::CommitKey,
-    pub commit_key_selectors_and_slack: CommS::CommitKey,
+    pub commit_key_witness: <Comm::CommitmentSlack as HomomorphicCommitmentScheme<F>>::CommitKey,
+    pub commit_key_selectors_and_slack:
+        <Comm::CommitmentWitness as HomomorphicCommitmentScheme<F>>::CommitKey,
 }
 
 /// The verifier key for the PLONK folding scheme. Contains a commitment to the q_C selector (constant)
-pub struct VerifierKey<F: PrimeField, CommS: HomomorphicCommitmentScheme<F>> {
-    pub selector_c_commitment: CommS::Commitment,
+pub struct VerifierKey<F: PrimeField, Comm: FoldingCommitmentConfig<F>> {
+    pub selector_c_commitment:
+        <Comm::CommitmentSlack as HomomorphicCommitmentScheme<F>>::Commitment,
 }
 
 /// Prover key for the PLONK folding scheme. Contains:
@@ -37,30 +38,25 @@ pub struct VerifierKey<F: PrimeField, CommS: HomomorphicCommitmentScheme<F>> {
 /// - a description of the circuit (needed to compute cross terms)
 /// - commitment parameters (as the public parameters)
 /// - the randomness that was used to commit to q_C
-pub struct ProverKey<
-    F: PrimeField,
-    CommS: HomomorphicCommitmentScheme<F>,
-    CommW: HomomorphicCommitmentScheme<F>,
-> {
+pub struct ProverKey<F: PrimeField, Comm: FoldingCommitmentConfig<F>> {
     pub circuit: PLONKCircuit,
-    pub public_parameters: PublicParameters<F, CommS, CommW>,
-    pub verifier_key: VerifierKey<F, CommS>,
+    pub public_parameters: PublicParameters<F, Comm>,
+    pub verifier_key: VerifierKey<F, Comm>,
     pub selector_c_commit_randomness: F,
 }
 
-impl<F, CommS, CommW> NonInteractiveFoldingScheme for PLONKFoldingScheme<F, CommS, CommW>
+impl<F, Comm> NonInteractiveFoldingScheme for PLONKFoldingScheme<F, Comm>
 where
     F: PrimeField,
-    CommS: HomomorphicCommitmentScheme<F>,
-    CommW: HomomorphicCommitmentScheme<F>,
+    Comm: FoldingCommitmentConfig<F>,
 {
-    type PublicParameters = PublicParameters<F, CommS, CommW>;
+    type PublicParameters = PublicParameters<F, Comm>;
     type Structure = PLONKCircuit;
-    type Instance = RelaxedPLONKInstance<F>;
+    type Instance = RelaxedPLONKInstance<F, Comm>;
     type Witness = RelaxedPLONKWitness<F>;
-    type ProverKey = ProverKey<F, CommS, CommW>;
-    type VerifierKey = VerifierKey<F, CommS>;
-    type ProverMessage = CommS::Commitment;
+    type ProverKey = ProverKey<F, Comm>;
+    type VerifierKey = VerifierKey<F, Comm>;
+    type ProverMessage = <Comm::CommitmentSlack as HomomorphicCommitmentScheme<F>>::Commitment;
 
     fn setup<R: ark_std::rand::Rng>(rng: &mut R) -> Self::PublicParameters {
         todo!()
@@ -93,3 +89,6 @@ where
         todo!()
     }
 }
+
+#[cfg(test)]
+mod tests {}
