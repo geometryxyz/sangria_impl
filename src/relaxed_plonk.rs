@@ -1,9 +1,25 @@
-use ark_ff::PrimeField;
+use ark_ff::{Field, PrimeField};
 use proof_essentials::vector_commitment::HomomorphicCommitmentScheme;
 
 use crate::{folding_scheme::FoldingCommitmentConfig, SangriaError};
 
 type ColumnVector<F> = Vec<F>;
+type Permutation<F> = Vec<F>;
+
+/// A constant variable for the q_L selector's index
+pub const LEFT_SELECTOR_INDEX: usize = 0;
+
+/// A constant variable for the q_R selector's index
+pub const RIGHT_SELECTOR_INDEX: usize = 1;
+
+/// A constant variable for the q_O selector's index
+pub const OUTPUT_SELECTOR_INDEX: usize = 2;
+
+/// A constant variable for the q_M selector's index
+pub const MULTIPLICATION_SELECTOR_INDEX: usize = 3;
+
+/// A constant variable for the q_C selector's index
+pub const CONSTANT_SELECTOR_INDEX: usize = 4;
 
 /// A committed relaxed PLONK instance
 pub struct RelaxedPLONKInstance<F: PrimeField, Comm: FoldingCommitmentConfig<F>> {
@@ -154,4 +170,29 @@ impl<F: PrimeField> PLONKInstance<F> {
 }
 
 /// A structure that hold the defining elements of a PLONK circuit
-pub struct PLONKCircuit {}
+#[derive(Clone)]
+pub struct PLONKCircuit<F: Field> {
+    selectors: Vec<ColumnVector<F>>,
+    copy_constraint: Permutation<F>,
+}
+
+impl<F: Field> PLONKCircuit<F> {
+    /// Returns the selectors matrix.
+    pub fn selectors(&self) -> Vec<ColumnVector<F>> {
+        self.selectors.clone()
+    }
+
+    /// Returns a single selector or an error if index is out of bounds.
+    pub fn single_selector(&self, selector_index: usize) -> Result<ColumnVector<F>, SangriaError> {
+        if selector_index > self.selectors.len() {
+            return Err(SangriaError::IndexOutOfBounds);
+        }
+
+        Ok(self.selectors[selector_index].clone())
+    }
+
+    /// Returns the copy constraints.
+    pub fn copy_constraint(&self) -> Permutation<F> {
+        self.copy_constraint.clone()
+    }
+}

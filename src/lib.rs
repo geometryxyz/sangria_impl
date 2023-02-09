@@ -59,6 +59,9 @@ pub trait StepCircuit<F: PrimeField> {
 
 /// Interface for a non-interactive folding scheme (NIFS).
 pub trait NonInteractiveFoldingScheme {
+    /// A type to contain the arguments necessary to run `setup`
+    type SetupInfo;
+
     /// Public parameters for the scheme.
     type PublicParameters;
 
@@ -81,7 +84,7 @@ pub trait NonInteractiveFoldingScheme {
     type ProverMessage;
 
     /// Run the randomised setup for the folding scheme to produce public parameters.
-    fn setup<R: Rng>(rng: &mut R) -> Self::PublicParameters;
+    fn setup<R: Rng>(info: &Self::SetupInfo, rng: &mut R) -> Self::PublicParameters;
 
     /// Using the public parameters, run the randomised encoder that produces a prover key and verifier key.
     fn encode<R: Rng>(
@@ -116,7 +119,11 @@ pub use folding_scheme::PLONKFoldingScheme;
 mod ivc;
 
 mod relaxed_plonk;
-pub use relaxed_plonk::{PLONKCircuit, RelaxedPLONKInstance, RelaxedPLONKWitness};
+pub use relaxed_plonk::{
+    PLONKCircuit, RelaxedPLONKInstance, RelaxedPLONKWitness, CONSTANT_SELECTOR_INDEX,
+    LEFT_SELECTOR_INDEX, MULTIPLICATION_SELECTOR_INDEX, OUTPUT_SELECTOR_INDEX,
+    RIGHT_SELECTOR_INDEX,
+};
 
 mod sangria;
 pub use sangria::Sangria;

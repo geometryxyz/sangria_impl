@@ -1,3 +1,4 @@
+use proof_essentials::error::CryptoError;
 use thiserror::Error;
 
 /// Errors returned by Sangria
@@ -6,4 +7,8 @@ pub enum SangriaError {
     /// returned if the supplied row or col in (row,col,val) tuple is out of range
     #[error("Index is out of bounds")]
     IndexOutOfBounds,
+
+    /// returned if the commitment scheme returns an error
+    #[error("An error occurred with the commitment scheme: {0}")]
+    CommitmentError(#[from] CryptoError),
 }
