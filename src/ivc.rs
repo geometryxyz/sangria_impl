@@ -1,11 +1,9 @@
 use ark_ff::PrimeField;
 use ark_std::{marker::PhantomData, rand::Rng};
-use proof_essentials::vector_commitment::HomomorphicCommitmentScheme;
 
 use crate::{
     folding_scheme::{self, FoldingCommitmentConfig},
-    NonInteractiveFoldingScheme, PLONKFoldingScheme, RelaxedPLONKInstance, RelaxedPLONKWitness,
-    StepCircuit, IVC,
+    RelaxedPLONKInstance, RelaxedPLONKWitness, StepCircuit, IVC,
 };
 
 /// A "pre-sangria" scheme. Implements IVC from a NIFS as described in Construction3 of Nova.
@@ -36,8 +34,8 @@ pub(crate) struct PublicParameters<
     HelperField: PrimeField,
     Config: SangriaIVCConfig<MainField, HelperField>,
 > {
-    pub main_nifs_pp: folding_scheme::PublicParameters<MainField, Config::MainCommitmentSchemes>,
-    pub helper_nifs_pp:
+    pub _main_nifs_pp: folding_scheme::PublicParameters<MainField, Config::MainCommitmentSchemes>,
+    pub _helper_nifs_pp:
         folding_scheme::PublicParameters<HelperField, Config::HelperCommitmentSchemes>,
 }
 
@@ -49,9 +47,9 @@ pub(crate) struct VerifierKey<
     Config: SangriaIVCConfig<MainField, HelperField>,
     SC: StepCircuit<MainField>,
 > {
-    pub main_nifs_vk: folding_scheme::VerifierKey<MainField, Config::MainCommitmentSchemes>,
-    pub helper_nifs_vk: folding_scheme::VerifierKey<HelperField, Config::HelperCommitmentSchemes>,
-    pub step_circuit: SC,
+    pub _main_nifs_vk: folding_scheme::VerifierKey<MainField, Config::MainCommitmentSchemes>,
+    pub _helper_nifs_vk: folding_scheme::VerifierKey<HelperField, Config::HelperCommitmentSchemes>,
+    pub _step_circuit: SC,
 }
 
 /// The SangriaIVC ProverKey contains prover keys for the foldings of the main and helper
@@ -62,18 +60,18 @@ pub(crate) struct ProverKey<
     Config: SangriaIVCConfig<MainField, HelperField>,
     SC: StepCircuit<MainField>,
 > {
-    pub main_nifs_pk: folding_scheme::ProverKey<MainField, Config::MainCommitmentSchemes>,
-    pub helper_nifs_pk: folding_scheme::ProverKey<HelperField, Config::HelperCommitmentSchemes>,
-    pub step_circuit: SC,
+    pub _main_nifs_pk: folding_scheme::ProverKey<MainField, Config::MainCommitmentSchemes>,
+    pub _helper_nifs_pk: folding_scheme::ProverKey<HelperField, Config::HelperCommitmentSchemes>,
+    pub _step_circuit: SC,
 }
 
 /// A half cycle proof is composed of two instance-witness pairs: one running instance-witness
 /// that captures steps 0 to i-1 (via folding) and one instance-witness for the i-th step (the latest).
 pub(crate) struct HalfCycleProof<F: PrimeField, Comm: FoldingCommitmentConfig<F>> {
-    pub latest_step_instance: RelaxedPLONKInstance<F, Comm>,
-    pub latest_step_witness: RelaxedPLONKWitness<F>,
-    pub running_instance: RelaxedPLONKInstance<F, Comm>,
-    pub running_witness: RelaxedPLONKWitness<F>,
+    pub _latest_step_instance: RelaxedPLONKInstance<F, Comm>,
+    pub _latest_step_witness: RelaxedPLONKWitness<F>,
+    pub _running_instance: RelaxedPLONKInstance<F, Comm>,
+    pub _running_witness: RelaxedPLONKWitness<F>,
 }
 
 /// An IVC proof is composed of two half-cycle proofs. Each half cycle proof is composed
@@ -84,8 +82,8 @@ pub(crate) struct IVCProof<
     HelperField: PrimeField,
     Config: SangriaIVCConfig<MainField, HelperField>,
 > {
-    pub main_half_proof: HalfCycleProof<MainField, Config::MainCommitmentSchemes>,
-    pub helper_half_proof: HalfCycleProof<HelperField, Config::HelperCommitmentSchemes>,
+    pub _main_half_proof: HalfCycleProof<MainField, Config::MainCommitmentSchemes>,
+    pub _helper_half_proof: HalfCycleProof<HelperField, Config::HelperCommitmentSchemes>,
 }
 
 impl<MainField, HelperField, Config, SC> IVC<MainField, SC>
@@ -101,33 +99,33 @@ where
     type VerifierKey = VerifierKey<MainField, HelperField, Config, SC>;
     type Proof = IVCProof<MainField, HelperField, Config>;
 
-    fn setup<R: Rng>(rng: &mut R) -> Self::PublicParameters {
+    fn setup<R: Rng>(_rng: &mut R) -> Self::PublicParameters {
         todo!()
     }
 
     fn encode<R: Rng>(
-        public_parameters: &Self::PublicParameters,
-        step_circuit: &SC,
-        rng: &mut R,
+        _public_parameters: &Self::PublicParameters,
+        _step_circuit: &SC,
+        _rng: &mut R,
     ) -> Result<(Self::ProverKey, Self::VerifierKey), crate::SangriaError> {
         todo!()
     }
 
     fn prove_step(
-        prover_key: &Self::ProverKey,
-        origin_state: &SC::State,
-        current_state: SC::State,
-        current_proof: Option<Self::Proof>,
-        current_witness: &SC::Witness,
+        _prover_key: &Self::ProverKey,
+        _origin_state: &SC::State,
+        _current_state: SC::State,
+        _current_proof: Option<Self::Proof>,
+        _current_witness: &SC::Witness,
     ) -> Result<(SC::State, Self::Proof), crate::SangriaError> {
         todo!()
     }
 
     fn verify(
-        verifier_key: &Self::VerifierKey,
-        origin_state: &SC::State,
-        current_state: SC::State,
-        current_proof: Option<Self::Proof>,
+        _verifier_key: &Self::VerifierKey,
+        _origin_state: &SC::State,
+        _current_state: SC::State,
+        _current_proof: Option<Self::Proof>,
     ) -> Result<(), crate::SangriaError> {
         todo!()
     }

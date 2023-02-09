@@ -139,20 +139,20 @@ where
     }
 
     fn prover(
-        prover_key: &Self::ProverKey,
-        left_instance: &Self::Instance,
-        left_witness: &Self::Witness,
-        right_instance: &Self::Instance,
-        right_witness: &Self::Witness,
+        _prover_key: &Self::ProverKey,
+        _left_instance: &Self::Instance,
+        _left_witness: &Self::Witness,
+        _right_instance: &Self::Instance,
+        _right_witness: &Self::Witness,
     ) -> Result<(Self::Instance, Self::Witness, Self::ProverMessage), SangriaError> {
         todo!()
     }
 
     fn verifier(
-        verifier_key: &Self::VerifierKey,
-        left_instance: &Self::Instance,
-        right_instance: &Self::Instance,
-        prover_message: &Self::ProverMessage,
+        _verifier_key: &Self::VerifierKey,
+        _left_instance: &Self::Instance,
+        _right_instance: &Self::Instance,
+        _prover_message: &Self::ProverMessage,
     ) -> Result<Self::Instance, SangriaError> {
         todo!()
     }

@@ -3,6 +3,9 @@
 //! verifiable computation by using a folding for PLONK. We use a modified version of HyperPlonk to
 //! compress the IVC proofs.
 
+use ark_ff::PrimeField;
+use ark_std::rand::Rng;
+
 /// Interface for an IVC scheme.
 pub trait IVC<F: PrimeField, SC: StepCircuit<F>> {
     /// Public parameters for the IVC scheme.
@@ -112,8 +115,6 @@ pub trait NonInteractiveFoldingScheme {
 }
 
 mod folding_scheme;
-use ark_ff::PrimeField;
-use ark_std::rand::Rng;
 pub use folding_scheme::PLONKFoldingScheme;
 
 mod ivc;
