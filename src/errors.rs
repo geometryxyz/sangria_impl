@@ -1,4 +1,3 @@
-use proof_essentials::error::CryptoError;
 use thiserror::Error;
 
 /// Errors returned by Sangria
@@ -9,6 +8,6 @@ pub enum SangriaError {
     IndexOutOfBounds,
 
     /// returned if the commitment scheme returns an error
-    #[error("An error occurred with the commitment scheme: {0}")]
-    CommitmentError(#[from] CryptoError),
+    #[error("An error occurred with the commitment scheme")]
+    CommitmentError,
 }

@@ -98,6 +98,7 @@ pub trait NonInteractiveFoldingScheme {
 
     /// The folding scheme prover. Outputs a folded instance-witness pair and the prover's message.
     fn prover(
+        public_parameters: &Self::PublicParameters,
         prover_key: &Self::ProverKey,
         left_instance: &Self::Instance,
         left_witness: &Self::Witness,
@@ -107,6 +108,7 @@ pub trait NonInteractiveFoldingScheme {
 
     /// The folding scheme verifier. Outputs a folded instance.
     fn verifier(
+        public_parameters: &Self::PublicParameters,
         verifier_key: &Self::VerifierKey,
         left_instance: &Self::Instance,
         right_instance: &Self::Instance,
@@ -117,7 +119,7 @@ pub trait NonInteractiveFoldingScheme {
 mod folding_scheme;
 pub use folding_scheme::PLONKFoldingScheme;
 
-mod ivc;
+// mod ivc;
 
 mod relaxed_plonk;
 pub use relaxed_plonk::{
@@ -131,3 +133,5 @@ pub use sangria::Sangria;
 
 mod errors;
 pub use errors::SangriaError;
+
+mod vector_commitment;

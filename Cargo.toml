@@ -8,6 +8,7 @@ edition = "2021"
 [dependencies]
 ark-crypto-primitives = "0.3.0"
 ark-ff = "0.3.0"
+ark-sponge = "0.3.0"
+ark-serialize = "0.3.0"
 ark-std = "0.3.0"
-proof-essentials = { git = "https://github.com/geometryresearch/proof-toolbox.git" }
 thiserror = "1.0.38"

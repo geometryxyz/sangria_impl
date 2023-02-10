@@ -1,6 +1,8 @@
 use ark_ff::{Field, PrimeField};
-use proof_essentials::vector_commitment::HomomorphicCommitmentScheme;
+use ark_sponge::Absorb;
+use std::ops::{Add, Mul};
 
+use crate::vector_commitment::HomomorphicCommitmentScheme;
 use crate::{folding_scheme::FoldingCommitmentConfig, SangriaError};
 
 type ColumnVector<F> = Vec<F>;
@@ -74,6 +76,54 @@ impl<F: PrimeField, Comm: FoldingCommitmentConfig<F>> RelaxedPLONKInstance<F, Co
     }
 }
 
+impl<F, Comm> Absorb for RelaxedPLONKInstance<F, Comm> 
+where
+F: PrimeField,
+ Comm: FoldingCommitmentConfig<F>
+{
+    fn to_sponge_bytes(&self, dest: &mut Vec<u8>) {
+        todo!()
+    }
+
+    fn to_sponge_field_elements<SpongeF: PrimeField>(&self, dest: &mut Vec<SpongeF>) {
+        todo!()
+    }
+}
+
+impl<F, Comm> Add<&Self> for RelaxedPLONKInstance<F, Comm> 
+where
+    F: PrimeField,
+    Comm: FoldingCommitmentConfig<F>
+{
+    type Output = Self;
+
+    fn add(self, rhs: &Self) -> Self::Output {
+        todo!()
+    }
+}
+
+impl<F, Comm> Mul<F> for RelaxedPLONKInstance<F, Comm> 
+where
+    F: PrimeField,
+    Comm: FoldingCommitmentConfig<F>
+{
+    type Output = Self;
+
+    fn mul(self, rhs: F) -> Self::Output {
+        todo!()
+    }
+}
+
+impl<F, Comm> Clone for RelaxedPLONKInstance<F, Comm> 
+where
+    F: PrimeField,
+    Comm: FoldingCommitmentConfig<F>
+{
+    fn clone(&self) -> Self {
+        todo!()
+    }
+}
+
 /// A committed relaxed PLONK witness.
 pub struct RelaxedPLONKWitness<F: PrimeField> {
     plonk_witness: PLONKWitness<F>,
@@ -142,6 +192,7 @@ impl<F: PrimeField> PLONKWitness<F> {
 
 /// A PLONK instance, this is a sub-table of the Trace with one row per public input plus
 /// one extra row to check the final output.
+#[derive(Clone)]
 pub struct PLONKInstance<F: PrimeField> {
     matrix: Vec<ColumnVector<F>>,
 }
@@ -194,5 +245,15 @@ impl<F: Field> PLONKCircuit<F> {
     /// Returns the copy constraints.
     pub fn copy_constraint(&self) -> Permutation<F> {
         self.copy_constraint.clone()
+    }
+}
+
+impl<CircuitField: PrimeField> Absorb for PLONKCircuit<CircuitField> {
+    fn to_sponge_bytes(&self, dest: &mut Vec<u8>) {
+        todo!()
+    }
+
+    fn to_sponge_field_elements<F: PrimeField>(&self, dest: &mut Vec<F>) {
+        todo!()
     }
 }
