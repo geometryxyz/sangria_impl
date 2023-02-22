@@ -88,8 +88,8 @@ where
 {
     fn clone(&self) -> Self {
         Self {
-            selector_c_commitment: self.selector_c_commitment.clone(),
-            transcript_seed: self.transcript_seed.clone(),
+            selector_c_commitment: self.selector_c_commitment,
+            transcript_seed: self.transcript_seed,
         }
     }
 }
