@@ -32,7 +32,7 @@ pub trait HomomorphicCommitmentScheme<F: Field> {
     /// Commit to a vector of scalars using the commit key
     fn commit(
         commit_key: &Self::CommitKey,
-        x: &Vec<F>,
+        x: &[F],
         r: F,
     ) -> Result<Self::Commitment, SangriaError>;
 }
