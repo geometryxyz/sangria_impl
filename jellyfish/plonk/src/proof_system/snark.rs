@@ -874,7 +874,7 @@ pub mod test {
             let extra_msg = if i % 2 == 0 {
                 None
             } else {
-                Some(format!("extra message: {}", i).into_bytes())
+                Some(format!("extra message: {i}").into_bytes())
             };
             proofs.push(
                 PlonkKzgSnark::<E>::prove::<_, _, T>(rng, cs, pk_ref, extra_msg.clone()).unwrap(),

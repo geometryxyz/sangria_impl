@@ -411,8 +411,8 @@ where
         let k1_bits = get_bits(&k1.into_repr().to_bits_le());
         let k2_bits = get_bits(&k1.into_repr().to_bits_le());
 
-        assert!(k1_bits < 128, "k1 bits {}", k1_bits);
-        assert!(k2_bits < 128, "k2 bits {}", k1_bits);
+        assert!(k1_bits < 128, "k1 bits {k1_bits}");
+        assert!(k2_bits < 128, "k2 bits {k1_bits}");
 
         //  (c) tmp1 = 0
         //  (d) tmp2 < 2^128
@@ -421,7 +421,7 @@ where
         let tmp2_fq = F::from_le_bytes_mod_order(&tmp2_int.to_bytes_le().1);
         let tmp2_bits = get_bits(&tmp2_fq.into_repr().to_bits_le());
         assert!(tmp1_int == BigInt::from(0));
-        assert!(tmp2_bits < 128, "tmp2 bits {}", tmp2_bits);
+        assert!(tmp2_bits < 128, "tmp2 bits {tmp2_bits}");
 
         // equation (f): tmp1 + 2^128 tmp2 =  lambda_1 * k2_sign * k2 + s - t * t_sign *
         // r1 - k1
