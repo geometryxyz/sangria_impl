@@ -51,14 +51,14 @@ macro_rules! plonk_prove_bench {
         let cs = gen_circuit_for_bench::<$bench_field>($num_gates, $bench_plonk_type).unwrap();
 
         let max_degree = $num_gates + 2;
-        let srs = PlonkKzgSnark::<$bench_curve>::universal_setup(max_degree, rng).unwrap();
+        let srs = PlonkKzgSnark::<$bench_curve, jf_primitives::pcs::prelude::UnivariateKzgPCS<$bench_curve>>::universal_setup(max_degree, rng).unwrap();
 
-        let (pk, _) = PlonkKzgSnark::<$bench_curve>::preprocess(&srs, &cs).unwrap();
+        let (pk, _) = PlonkKzgSnark::<$bench_curve, jf_primitives::pcs::prelude::UnivariateKzgPCS<$bench_curve>>::preprocess(&srs, &cs).unwrap();
 
         let start = Instant::now();
 
         for _ in 0..NUM_REPETITIONS {
-            let _ = PlonkKzgSnark::<$bench_curve>::prove::<_, _, StandardTranscript>(
+            let _ = PlonkKzgSnark::<$bench_curve, jf_primitives::pcs::prelude::UnivariateKzgPCS<$bench_curve>>::prove::<_, _, StandardTranscript>(
                 rng, &cs, &pk, None,
             )
             .unwrap();
@@ -90,19 +90,19 @@ macro_rules! plonk_verify_bench {
         let cs = gen_circuit_for_bench::<$bench_field>($num_gates, $bench_plonk_type).unwrap();
 
         let max_degree = $num_gates + 2;
-        let srs = PlonkKzgSnark::<$bench_curve>::universal_setup(max_degree, rng).unwrap();
+        let srs = PlonkKzgSnark::<$bench_curve, jf_primitives::pcs::prelude::UnivariateKzgPCS<$bench_curve>>::universal_setup(max_degree, rng).unwrap();
 
-        let (pk, vk) = PlonkKzgSnark::<$bench_curve>::preprocess(&srs, &cs).unwrap();
+        let (pk, vk) = PlonkKzgSnark::<$bench_curve, jf_primitives::pcs::prelude::UnivariateKzgPCS<$bench_curve>>::preprocess(&srs, &cs).unwrap();
 
         let proof =
-            PlonkKzgSnark::<$bench_curve>::prove::<_, _, StandardTranscript>(rng, &cs, &pk, None)
+            PlonkKzgSnark::<$bench_curve, jf_primitives::pcs::prelude::UnivariateKzgPCS<$bench_curve>>::prove::<_, _, StandardTranscript>(rng, &cs, &pk, None)
                 .unwrap();
 
         let start = Instant::now();
 
         for _ in 0..NUM_REPETITIONS {
             let _ =
-                PlonkKzgSnark::<$bench_curve>::verify::<StandardTranscript>(&vk, &[], &proof, None)
+                PlonkKzgSnark::<$bench_curve, jf_primitives::pcs::prelude::UnivariateKzgPCS<$bench_curve>>::verify::<StandardTranscript>(&vk, &[], &proof, None)
                     .unwrap();
         }
 
@@ -132,12 +132,12 @@ macro_rules! plonk_batch_verify_bench {
         let cs = gen_circuit_for_bench::<$bench_field>(1024, $bench_plonk_type).unwrap();
 
         let max_degree = 1026;
-        let srs = PlonkKzgSnark::<$bench_curve>::universal_setup(max_degree, rng).unwrap();
+        let srs = PlonkKzgSnark::<$bench_curve, jf_primitives::pcs::prelude::UnivariateKzgPCS<$bench_curve>>::universal_setup(max_degree, rng).unwrap();
 
-        let (pk, vk) = PlonkKzgSnark::<$bench_curve>::preprocess(&srs, &cs).unwrap();
+        let (pk, vk) = PlonkKzgSnark::<$bench_curve, jf_primitives::pcs::prelude::UnivariateKzgPCS<$bench_curve>>::preprocess(&srs, &cs).unwrap();
 
         let proof =
-            PlonkKzgSnark::<$bench_curve>::prove::<_, _, StandardTranscript>(rng, &cs, &pk, None)
+            PlonkKzgSnark::<$bench_curve, jf_primitives::pcs::prelude::UnivariateKzgPCS<$bench_curve>>::prove::<_, _, StandardTranscript>(rng, &cs, &pk, None)
                 .unwrap();
 
         let vks = vec![&vk; $num_proofs];
@@ -148,7 +148,7 @@ macro_rules! plonk_batch_verify_bench {
         let start = Instant::now();
 
         for _ in 0..NUM_REPETITIONS {
-            let _ = PlonkKzgSnark::<$bench_curve>::batch_verify::<StandardTranscript>(
+            let _ = PlonkKzgSnark::<$bench_curve, jf_primitives::pcs::prelude::UnivariateKzgPCS<$bench_curve>>::batch_verify::<StandardTranscript>(
                 &vks,
                 &public_inputs_ref[..],
                 &proofs_ref,

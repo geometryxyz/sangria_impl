@@ -24,7 +24,10 @@ use ark_ff::Field;
 use ark_poly::Radix2EvaluationDomain;
 use ark_std::vec::Vec;
 use hashbrown::HashMap;
-use jf_primitives::{pcs::prelude::Commitment, rescue::RescueParameter};
+use jf_primitives::{
+    pcs::{prelude::Commitment, PolynomialCommitmentScheme},
+    rescue::RescueParameter,
+};
 use jf_relation::gadgets::ecc::SWToTEConParam;
 
 /// A wrapper of crate::proof_system::structs::Challenges
@@ -177,9 +180,9 @@ where
         Ok(verifier::Verifier::new(domain_size)?.into())
     }
     /// Prepare the (aggregated) polynomial commitment evaluation information.
-    pub fn prepare_pcs_info<T>(
+    pub fn prepare_pcs_info<T, S: PolynomialCommitmentScheme<E>>(
         &self,
-        verify_keys: &[&VerifyingKey<E>],
+        verify_keys: &[&VerifyingKey<E, S>],
         public_inputs: &[&[E::Fr]],
         batch_proof: &BatchProof<E>,
         extra_transcript_init_msg: &Option<Vec<u8>>,
@@ -189,7 +192,7 @@ where
     {
         let tmp: verifier::Verifier<E> = (*self).clone().into();
         Ok(tmp
-            .prepare_pcs_info::<T>(
+            .prepare_pcs_info::<T, S>(
                 verify_keys,
                 public_inputs,
                 batch_proof,
@@ -201,8 +204,8 @@ where
     /// Compute verifier challenges `tau`, `beta`, `gamma`, `alpha`, `zeta`,
     /// 'v', 'u'.
     #[inline]
-    pub fn compute_challenges<T>(
-        verify_keys: &[&VerifyingKey<E>],
+    pub fn compute_challenges<T, S: PolynomialCommitmentScheme<E>>(
+        verify_keys: &[&VerifyingKey<E, S>],
         public_inputs: &[&[E::Fr]],
         batch_proof: &BatchProof<E>,
         extra_transcript_init_msg: &Option<Vec<u8>>,
@@ -210,7 +213,7 @@ where
     where
         T: PlonkTranscript<F>,
     {
-        Ok(verifier::Verifier::compute_challenges::<T>(
+        Ok(verifier::Verifier::compute_challenges::<T, S>(
             verify_keys,
             public_inputs,
             batch_proof,
@@ -236,10 +239,10 @@ where
     /// where m is the number of instances, and k_j is the number of alpha power
     /// terms added to the first j-1 instances.
     #[allow(clippy::too_many_arguments)]
-    pub fn compute_lin_poly_constant_term(
+    pub fn compute_lin_poly_constant_term<S: PolynomialCommitmentScheme<E>>(
         &self,
         challenges: &Challenges<E::Fr>,
-        verify_keys: &[&VerifyingKey<E>],
+        verify_keys: &[&VerifyingKey<E, S>],
         public_inputs: &[&[E::Fr]],
         batch_proof: &BatchProof<E>,
         vanish_eval: &E::Fr,
@@ -270,9 +273,9 @@ where
     /// The verification key type is guaranteed to match the Plonk proof type.
     /// The returned commitment is a generalization of `[F]1` described in Sec 8.4, step 10 of https://eprint.iacr.org/2019/953.pdf
     #[allow(clippy::too_many_arguments)]
-    pub fn aggregate_poly_commitments(
+    pub fn aggregate_poly_commitments<S: PolynomialCommitmentScheme<E>>(
         &self,
-        vks: &[&VerifyingKey<E>],
+        vks: &[&VerifyingKey<E, S>],
         challenges: &Challenges<E::Fr>,
         vanish_eval: &E::Fr,
         lagrange_1_eval: &E::Fr,
@@ -300,9 +303,9 @@ where
     /// which is a generalization of `[D]1` specified in Sec 8.3, Verifier
     /// algorithm step 9 of https://eprint.iacr.org/2019/953.pdf.
     #[allow(clippy::too_many_arguments)]
-    pub fn linearization_scalars_and_bases(
+    pub fn linearization_scalars_and_bases<S: PolynomialCommitmentScheme<E>>(
         &self,
-        vks: &[&VerifyingKey<E>],
+        vks: &[&VerifyingKey<E, S>],
         challenges: &Challenges<E::Fr>,
         vanish_eval: &E::Fr,
         lagrange_1_eval: &E::Fr,

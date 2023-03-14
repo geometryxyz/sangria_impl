@@ -28,9 +28,7 @@ use ark_std::{
 use espresso_systems_common::jellyfish::tag;
 use hashbrown::HashMap;
 use jf_primitives::{
-    pcs::prelude::{
-        Commitment, UnivariateProverParam, UnivariateUniversalParams, UnivariateVerifierParam,
-    },
+    pcs::{prelude::Commitment, PolynomialCommitmentScheme, UVPCS},
     rescue::RescueParameter,
 };
 use jf_relation::{
@@ -45,11 +43,11 @@ use jf_utils::{field_switching, fq_to_fr, fr_to_fq};
 use tagged_base64::tagged;
 
 /// Universal StructuredReferenceString
-pub type UniversalSrs<E> = UnivariateUniversalParams<E>;
+pub type UniversalSrs<E, S> = <S as PolynomialCommitmentScheme<E>>::SRS;
 /// Commitment key
-pub type CommitKey<E> = UnivariateProverParam<<E as PairingEngine>::G1Affine>;
+pub type CommitKey<E, S> = <S as PolynomialCommitmentScheme<E>>::ProverParam;
 /// Key for verifying PCS opening proof.
-pub type OpenKey<E> = UnivariateVerifierParam<E>;
+pub type OpenKey<E, S> = <S as PolynomialCommitmentScheme<E>>::VerifierParam;
 
 /// A Plonk SNARK proof.
 #[tagged(tag::PROOF)]
@@ -544,8 +542,8 @@ impl<F: Field> PlookupEvaluations<F> {
 
 /// Preprocessed prover parameters used to compute Plonk proofs for a certain
 /// circuit.
-#[derive(Debug, Clone, PartialEq, Eq, CanonicalSerialize, CanonicalDeserialize)]
-pub struct ProvingKey<E: PairingEngine> {
+#[derive(Debug, PartialEq, Eq, CanonicalSerialize, CanonicalDeserialize)]
+pub struct ProvingKey<E: PairingEngine, S: PolynomialCommitmentScheme<E>> {
     /// Extended permutation (sigma) polynomials.
     pub(crate) sigmas: Vec<DensePolynomial<E::Fr>>,
 
@@ -553,13 +551,26 @@ pub struct ProvingKey<E: PairingEngine> {
     pub(crate) selectors: Vec<DensePolynomial<E::Fr>>,
 
     // KZG PCS committing key.
-    pub(crate) commit_key: CommitKey<E>,
+    pub(crate) commit_key: CommitKey<E, S>,
 
     /// The verifying key. It is used by prover to initialize transcripts.
-    pub vk: VerifyingKey<E>,
+    pub vk: VerifyingKey<E, S>,
 
     /// Proving key for Plookup, None if not support lookup.
     pub(crate) plookup_pk: Option<PlookupProvingKey<E>>,
+}
+
+// TODO(fga): figure out why this can't be derived.
+impl<E: PairingEngine, S: PolynomialCommitmentScheme<E>> Clone for ProvingKey<E, S> {
+    fn clone(&self) -> Self {
+        Self {
+            sigmas: self.sigmas.clone(),
+            selectors: self.selectors.clone(),
+            commit_key: self.commit_key.clone(),
+            vk: self.vk.clone(),
+            plookup_pk: self.plookup_pk.clone(),
+        }
+    }
 }
 
 /// Preprocessed prover parameters used to compute Plookup proofs for a certain
@@ -579,7 +590,7 @@ pub struct PlookupProvingKey<E: PairingEngine> {
     pub(crate) q_dom_sep_poly: DensePolynomial<E::Fr>,
 }
 
-impl<E: PairingEngine> ProvingKey<E> {
+impl<E: PairingEngine, S: PolynomialCommitmentScheme<E>> ProvingKey<E, S> {
     /// The size of the evaluation domain. Should be a power of two.
     pub(crate) fn domain_size(&self) -> usize {
         self.vk.domain_size
@@ -651,8 +662,8 @@ impl<E: PairingEngine> ProvingKey<E> {
 
 /// Preprocessed verifier parameters used to verify Plonk proofs for a certain
 /// circuit.
-#[derive(Debug, Clone, Eq, PartialEq, CanonicalSerialize, CanonicalDeserialize)]
-pub struct VerifyingKey<E: PairingEngine> {
+#[derive(Debug, Eq, PartialEq, CanonicalSerialize, CanonicalDeserialize)]
+pub struct VerifyingKey<E: PairingEngine, S: PolynomialCommitmentScheme<E>> {
     /// The size of the evaluation domain. Should be a power of two.
     pub(crate) domain_size: usize,
 
@@ -670,7 +681,7 @@ pub struct VerifyingKey<E: PairingEngine> {
     pub(crate) k: Vec<E::Fr>,
 
     /// KZG PCS opening key.
-    pub open_key: OpenKey<E>,
+    pub open_key: OpenKey<E, S>,
 
     /// A flag indicating whether the key is a merged key.
     pub(crate) is_merged: bool,
@@ -679,14 +690,31 @@ pub struct VerifyingKey<E: PairingEngine> {
     pub(crate) plookup_vk: Option<PlookupVerifyingKey<E>>,
 }
 
-impl<E, F, P1, P2> From<VerifyingKey<E>> for Vec<E::Fq>
+// TODO(fga): figure why this isn't trivially derived
+impl<E: PairingEngine, S: PolynomialCommitmentScheme<E>> Clone for VerifyingKey<E, S> {
+    fn clone(&self) -> Self {
+        Self {
+            domain_size: self.domain_size,
+            num_inputs: self.num_inputs,
+            sigma_comms: self.sigma_comms.clone(),
+            selector_comms: self.selector_comms.clone(),
+            k: self.k.clone(),
+            open_key: self.open_key.clone(),
+            is_merged: self.is_merged,
+            plookup_vk: self.plookup_vk.clone(),
+        }
+    }
+}
+
+impl<E, F, P1, P2, S> From<VerifyingKey<E, S>> for Vec<E::Fq>
 where
     E: PairingEngine<G1Affine = GroupAffine<P1>, G2Affine = GroupAffine<P2>, Fqe = Fp2<F>>,
     F: Fp2Parameters<Fp = E::Fq>,
     P1: SWModelParameters<BaseField = E::Fq, ScalarField = E::Fr>,
     P2: SWModelParameters<BaseField = E::Fqe, ScalarField = E::Fr>,
+    S: UVPCS<E>,
 {
-    fn from(vk: VerifyingKey<E>) -> Self {
+    fn from(vk: VerifyingKey<E, S>) -> Self {
         if vk.plookup_vk.is_some() {
             panic!("Only support TurboPlonk VerifyingKey for now.");
         }
@@ -714,11 +742,12 @@ where
     }
 }
 
-impl<E, F, P> VerifyingKey<E>
+impl<E, F, S, P> VerifyingKey<E, S>
 where
     E: PairingEngine<Fq = F, G1Affine = GroupAffine<P>>,
     F: SWToTEConParam,
     P: SWModelParameters<BaseField = F>,
+    S: PolynomialCommitmentScheme<E>,
 {
     /// Convert the group elements to a list of scalars that represent the
     /// Twisted Edwards coordinates.
@@ -757,10 +786,13 @@ pub struct PlookupVerifyingKey<E: PairingEngine> {
     pub(crate) q_dom_sep_comm: Commitment<E>,
 }
 
-impl<E: PairingEngine> VerifyingKey<E> {
+impl<E: PairingEngine, S: PolynomialCommitmentScheme<E>> VerifyingKey<E, S> {
     /// Create a dummy TurboPlonk verification key for a circuit with
     /// `num_inputs` public inputs and domain size `domain_size`.
-    pub fn dummy(num_inputs: usize, domain_size: usize) -> Self {
+    pub fn dummy(num_inputs: usize, domain_size: usize) -> Self
+    where
+        <S as PolynomialCommitmentScheme<E>>::VerifierParam: Default,
+    {
         let num_wire_types = GATE_WIDTH + 1;
         Self {
             domain_size,
@@ -768,7 +800,7 @@ impl<E: PairingEngine> VerifyingKey<E> {
             sigma_comms: vec![Commitment::default(); num_wire_types],
             selector_comms: vec![Commitment::default(); N_TURBO_PLONK_SELECTORS],
             k: compute_coset_representatives(num_wire_types, Some(domain_size)),
-            open_key: OpenKey::default(),
+            open_key: OpenKey::<_, S>::default(),
             is_merged: false,
             plookup_vk: None,
         }
@@ -818,7 +850,7 @@ impl<E: PairingEngine> VerifyingKey<E> {
             sigma_comms,
             selector_comms,
             k: self.k.clone(),
-            open_key: self.open_key,
+            open_key: self.open_key.clone(),
             plookup_vk: None,
             is_merged: true,
         })

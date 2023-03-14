@@ -31,7 +31,8 @@ use ark_std::{
     vec::Vec,
 };
 use jf_primitives::{
-    pcs::{prelude::UnivariateKzgPCS, PolynomialCommitmentScheme, StructuredReferenceString},
+    pcs::PolynomialCommitmentScheme,
+    pcs::{WithMaxDegree, UVPCS},
     rescue::RescueParameter,
 };
 use jf_relation::{
@@ -41,14 +42,15 @@ use jf_utils::par_utils::parallelizable_slice_iter;
 #[cfg(feature = "parallel")]
 use rayon::prelude::*;
 
-/// A Plonk instantiated with KZG PCS
-pub struct PlonkKzgSnark<E: PairingEngine>(PhantomData<E>);
+/// A Plonk instantiated with a KZG PCS variant
+pub struct PlonkKzgSnark<E: PairingEngine, S: PolynomialCommitmentScheme<E>>(PhantomData<(E, S)>);
 
-impl<E, F, P> PlonkKzgSnark<E>
+impl<E, F, P, S> PlonkKzgSnark<E, S>
 where
     E: PairingEngine<Fq = F, G1Affine = GroupAffine<P>>,
     F: RescueParameter + SWToTEConParam,
     P: SWModelParameters<BaseField = F>,
+    S: UVPCS<E>,
 {
     #[allow(clippy::new_without_default)]
     /// A new Plonk KZG SNARK
@@ -60,11 +62,12 @@ where
     pub fn batch_prove<C, R, T>(
         prng: &mut R,
         circuits: &[&C],
-        prove_keys: &[&ProvingKey<E>],
+        prove_keys: &[&ProvingKey<E, S>],
     ) -> Result<BatchProof<E>, PlonkError>
     where
         C: Arithmetization<E::Fr>,
         R: CryptoRng + RngCore,
+        S: PolynomialCommitmentScheme<E>,
         T: PlonkTranscript<F>,
     {
         let (batch_proof, ..) =
@@ -74,7 +77,7 @@ where
 
     /// Verify a single aggregated Plonk proof.
     pub fn verify_batch_proof<T>(
-        verify_keys: &[&VerifyingKey<E>],
+        verify_keys: &[&VerifyingKey<E, S>],
         public_inputs: &[&[E::Fr]],
         batch_proof: &BatchProof<E>,
     ) -> Result<(), PlonkError>
@@ -86,8 +89,8 @@ where
         }
         let verifier = Verifier::new(verify_keys[0].domain_size)?;
         let pcs_info =
-            verifier.prepare_pcs_info::<T>(verify_keys, public_inputs, batch_proof, &None)?;
-        if !Verifier::batch_verify_opening_proofs::<T>(
+            verifier.prepare_pcs_info::<T, S>(verify_keys, public_inputs, batch_proof, &None)?;
+        if !Verifier::batch_verify_opening_proofs::<T, S>(
             &verify_keys[0].open_key, // all open_key are the same
             &[pcs_info],
         )? {
@@ -98,7 +101,7 @@ where
 
     /// Batch verify multiple SNARK proofs (w.r.t. different verifying keys).
     pub fn batch_verify<T>(
-        verify_keys: &[&VerifyingKey<E>],
+        verify_keys: &[&VerifyingKey<E, S>],
         public_inputs: &[&[E::Fr]],
         proofs: &[&Proof<E>],
         extra_transcript_init_msgs: &[Option<Vec<u8>>],
@@ -132,7 +135,7 @@ where
             .zip(parallelizable_slice_iter(extra_transcript_init_msgs))
             .map(|(((&vk, &proof), &pub_input), extra_msg)| {
                 let verifier = Verifier::new(vk.domain_size)?;
-                verifier.prepare_pcs_info::<T>(
+                verifier.prepare_pcs_info::<T, S>(
                     &[vk],
                     &[pub_input],
                     &(*proof).clone().into(),
@@ -141,7 +144,7 @@ where
             })
             .collect::<Result<Vec<_>, PlonkError>>()?;
 
-        if !Verifier::batch_verify_opening_proofs::<T>(
+        if !Verifier::batch_verify_opening_proofs::<T, S>(
             &verify_keys[0].open_key, // all open_key are the same
             &pcs_infos,
         )? {
@@ -162,7 +165,7 @@ where
     fn batch_prove_internal<C, R, T>(
         prng: &mut R,
         circuits: &[&C],
-        prove_keys: &[&ProvingKey<E>],
+        prove_keys: &[&ProvingKey<E, S>],
         extra_transcript_init_msg: Option<Vec<u8>>,
     ) -> Result<(BatchProof<E>, Vec<Oracles<E::Fr>>, Challenges<E::Fr>), PlonkError>
     where
@@ -348,7 +351,7 @@ where
             plookup_evals_vec.push(plookup_evals);
         }
 
-        let mut lin_poly = Prover::<E>::compute_quotient_component_for_lin_poly(
+        let mut lin_poly = Prover::<E, S>::compute_quotient_component_for_lin_poly(
             n,
             challenges.zeta,
             &split_quot_polys,
@@ -417,23 +420,25 @@ where
     }
 }
 
-impl<E, F, P> UniversalSNARK<E> for PlonkKzgSnark<E>
+impl<E, F, P, S> UniversalSNARK<E> for PlonkKzgSnark<E, S>
 where
     E: PairingEngine<Fq = F, G1Affine = GroupAffine<P>>,
+
     F: RescueParameter + SWToTEConParam,
     P: SWModelParameters<BaseField = F>,
+    S: UVPCS<E>,
 {
     type Proof = Proof<E>;
-    type ProvingKey = ProvingKey<E>;
-    type VerifyingKey = VerifyingKey<E>;
-    type UniversalSRS = UniversalSrs<E>;
+    type ProvingKey = ProvingKey<E, S>;
+    type VerifyingKey = VerifyingKey<E, S>;
+    type UniversalSRS = UniversalSrs<E, S>;
     type Error = PlonkError;
 
     fn universal_setup<R: RngCore + CryptoRng>(
         max_degree: usize,
         rng: &mut R,
-    ) -> Result<Self::UniversalSRS, Self::Error> {
-        UnivariateKzgPCS::<E>::gen_srs_for_testing(rng, max_degree).map_err(PlonkError::PCSError)
+    ) -> Result<S::SRS, Self::Error> {
+        S::gen_srs_for_testing(rng, max_degree).map_err(PlonkError::PCSError)
     }
 
     /// Input a circuit and the SRS, precompute the proving key and verification
@@ -446,7 +451,7 @@ where
         let domain_size = circuit.eval_domain_size()?;
         let srs_size = circuit.srs_size()?;
         let num_inputs = circuit.num_inputs();
-        if srs.max_degree() < circuit.srs_size()? {
+        if WithMaxDegree::max_degree(srs) < circuit.srs_size()? {
             return Err(PlonkError::IndexTooLarge);
         }
         // 1. Compute selector and permutation polynomials.
@@ -470,14 +475,14 @@ where
         };
 
         // 2. Compute VerifyingKey
-        let (commit_key, open_key) = srs.trim(srs_size)?;
+        let (commit_key, open_key) = S::trim(srs, srs_size, None)?;
         let selector_comms = parallelizable_slice_iter(&selectors_polys)
-            .map(|poly| UnivariateKzgPCS::commit(&commit_key, poly).map_err(PlonkError::PCSError))
+            .map(|poly| S::commit(&commit_key, poly).map_err(PlonkError::PCSError))
             .collect::<Result<Vec<_>, PlonkError>>()?
             .into_iter()
             .collect();
         let sigma_comms = parallelizable_slice_iter(&sigma_polys)
-            .map(|poly| UnivariateKzgPCS::commit(&commit_key, poly).map_err(PlonkError::PCSError))
+            .map(|poly| S::commit(&commit_key, poly).map_err(PlonkError::PCSError))
             .collect::<Result<Vec<_>, PlonkError>>()?
             .into_iter()
             .collect();
@@ -486,19 +491,19 @@ where
         let plookup_vk = match circuit.support_lookup() {
             false => None,
             true => Some(PlookupVerifyingKey {
-                range_table_comm: UnivariateKzgPCS::commit(
+                range_table_comm: S::commit(
                     &commit_key,
                     &plookup_pk.as_ref().unwrap().range_table_poly,
                 )?,
-                key_table_comm: UnivariateKzgPCS::commit(
+                key_table_comm: S::commit(
                     &commit_key,
                     &plookup_pk.as_ref().unwrap().key_table_poly,
                 )?,
-                table_dom_sep_comm: UnivariateKzgPCS::commit(
+                table_dom_sep_comm: S::commit(
                     &commit_key,
                     &plookup_pk.as_ref().unwrap().table_dom_sep_poly,
                 )?,
-                q_dom_sep_comm: UnivariateKzgPCS::commit(
+                q_dom_sep_comm: S::commit(
                     &commit_key,
                     &plookup_pk.as_ref().unwrap().q_dom_sep_poly,
                 )?,
@@ -619,7 +624,7 @@ pub mod test {
     use jf_primitives::{
         pcs::{
             prelude::{Commitment, UnivariateKzgPCS},
-            PolynomialCommitmentScheme,
+            PolynomialCommitmentScheme, UVPCS,
         },
         rescue::RescueParameter,
     };
@@ -721,8 +726,8 @@ pub mod test {
         let sigmas = circuit.compute_extended_permutation_polynomials()?;
 
         let max_degree = 64 + 2;
-        let srs = PlonkKzgSnark::<E>::universal_setup(max_degree, rng)?;
-        let (pk, vk) = PlonkKzgSnark::<E>::preprocess(&srs, &circuit)?;
+        let srs = PlonkKzgSnark::<E, UnivariateKzgPCS<E>>::universal_setup(max_degree, rng)?;
+        let (pk, vk) = PlonkKzgSnark::<E, UnivariateKzgPCS<E>>::preprocess(&srs, &circuit)?;
 
         // check proving key
         assert_eq!(pk.selectors, selectors);
@@ -853,7 +858,7 @@ pub mod test {
         let rng = &mut test_rng();
         let n = 64;
         let max_degree = n + 2;
-        let srs = PlonkKzgSnark::<E>::universal_setup(max_degree, rng)?;
+        let srs = PlonkKzgSnark::<E, UnivariateKzgPCS<E>>::universal_setup(max_degree, rng)?;
 
         // 2. Create circuits
         let circuits = (0..6)
@@ -864,8 +869,8 @@ pub mod test {
             })
             .collect::<Result<Vec<_>, PlonkError>>()?;
         // 3. Preprocessing
-        let (pk1, vk1) = PlonkKzgSnark::<E>::preprocess(&srs, &circuits[0])?;
-        let (pk2, vk2) = PlonkKzgSnark::<E>::preprocess(&srs, &circuits[3])?;
+        let (pk1, vk1) = PlonkKzgSnark::<E, UnivariateKzgPCS<E>>::preprocess(&srs, &circuits[0])?;
+        let (pk2, vk2) = PlonkKzgSnark::<E, UnivariateKzgPCS<E>>::preprocess(&srs, &circuits[3])?;
         // 4. Proving
         let mut proofs = vec![];
         let mut extra_msgs = vec![];
@@ -877,7 +882,13 @@ pub mod test {
                 Some(format!("extra message: {i}").into_bytes())
             };
             proofs.push(
-                PlonkKzgSnark::<E>::prove::<_, _, T>(rng, cs, pk_ref, extra_msg.clone()).unwrap(),
+                PlonkKzgSnark::<E, UnivariateKzgPCS<E>>::prove::<_, _, T>(
+                    rng,
+                    cs,
+                    pk_ref,
+                    extra_msg.clone(),
+                )
+                .unwrap(),
             );
             extra_msgs.push(extra_msg);
         }
@@ -889,7 +900,7 @@ pub mod test {
             .collect::<Result<Vec<Vec<E::Fr>>, _>>()?;
         for (i, proof) in proofs.iter().enumerate() {
             let vk_ref = if i < 3 { &vk1 } else { &vk2 };
-            assert!(PlonkKzgSnark::<E>::verify::<T>(
+            assert!(PlonkKzgSnark::<E, UnivariateKzgPCS<E>>::verify::<T>(
                 vk_ref,
                 &public_inputs[i],
                 proof,
@@ -899,7 +910,7 @@ pub mod test {
             // Inconsistent proof should fail the verification.
             let mut bad_pub_input = public_inputs[i].clone();
             bad_pub_input[0] = E::Fr::from(0u8);
-            assert!(PlonkKzgSnark::<E>::verify::<T>(
+            assert!(PlonkKzgSnark::<E, UnivariateKzgPCS<E>>::verify::<T>(
                 vk_ref,
                 &bad_pub_input,
                 proof,
@@ -907,7 +918,7 @@ pub mod test {
             )
             .is_err());
             // Incorrect extra transcript message should fail
-            assert!(PlonkKzgSnark::<E>::verify::<T>(
+            assert!(PlonkKzgSnark::<E, UnivariateKzgPCS<E>>::verify::<T>(
                 vk_ref,
                 &bad_pub_input,
                 proof,
@@ -921,7 +932,7 @@ pub mod test {
             let mut bad_proof = proof.clone();
             bad_proof.opening_proof = Commitment::default();
             bad_proof.shifted_opening_proof = Commitment::default();
-            assert!(PlonkKzgSnark::<E>::verify::<T>(
+            assert!(PlonkKzgSnark::<E, UnivariateKzgPCS<E>>::verify::<T>(
                 vk_ref,
                 &public_inputs[i],
                 &bad_proof,
@@ -937,7 +948,7 @@ pub mod test {
             .map(|pub_input| &pub_input[..])
             .collect();
         let mut proofs_ref: Vec<&Proof<E>> = proofs.iter().collect();
-        assert!(PlonkKzgSnark::<E>::batch_verify::<T>(
+        assert!(PlonkKzgSnark::<E, UnivariateKzgPCS<E>>::batch_verify::<T>(
             &vks,
             &public_inputs_ref,
             &proofs_ref,
@@ -946,7 +957,7 @@ pub mod test {
         .is_ok());
 
         // Inconsistent params
-        assert!(PlonkKzgSnark::<E>::batch_verify::<T>(
+        assert!(PlonkKzgSnark::<E, UnivariateKzgPCS<E>>::batch_verify::<T>(
             &vks[..5],
             &public_inputs_ref,
             &proofs_ref,
@@ -954,7 +965,7 @@ pub mod test {
         )
         .is_err());
 
-        assert!(PlonkKzgSnark::<E>::batch_verify::<T>(
+        assert!(PlonkKzgSnark::<E, UnivariateKzgPCS<E>>::batch_verify::<T>(
             &vks,
             &public_inputs_ref[..5],
             &proofs_ref,
@@ -962,7 +973,7 @@ pub mod test {
         )
         .is_err());
 
-        assert!(PlonkKzgSnark::<E>::batch_verify::<T>(
+        assert!(PlonkKzgSnark::<E, UnivariateKzgPCS<E>>::batch_verify::<T>(
             &vks,
             &public_inputs_ref,
             &proofs_ref[..5],
@@ -970,7 +981,7 @@ pub mod test {
         )
         .is_err());
 
-        assert!(PlonkKzgSnark::<E>::batch_verify::<T>(
+        assert!(PlonkKzgSnark::<E, UnivariateKzgPCS<E>>::batch_verify::<T>(
             &vks,
             &public_inputs_ref,
             &proofs_ref,
@@ -978,18 +989,24 @@ pub mod test {
         )
         .is_err());
 
-        assert!(
-            PlonkKzgSnark::<E>::batch_verify::<T>(&vks, &public_inputs_ref, &proofs_ref, &[],)
-                .is_err()
-        );
+        assert!(PlonkKzgSnark::<E, UnivariateKzgPCS<E>>::batch_verify::<T>(
+            &vks,
+            &public_inputs_ref,
+            &proofs_ref,
+            &[],
+        )
+        .is_err());
 
         // Empty params
-        assert!(PlonkKzgSnark::<E>::batch_verify::<T>(&[], &[], &[], &[],).is_err());
+        assert!(
+            PlonkKzgSnark::<E, UnivariateKzgPCS<E>>::batch_verify::<T>(&[], &[], &[], &[],)
+                .is_err()
+        );
 
         // Error paths
         let tmp_pi_ref = public_inputs_ref[0];
         public_inputs_ref[0] = public_inputs_ref[1];
-        assert!(PlonkKzgSnark::<E>::batch_verify::<T>(
+        assert!(PlonkKzgSnark::<E, UnivariateKzgPCS<E>>::batch_verify::<T>(
             &vks,
             &public_inputs_ref,
             &proofs_ref,
@@ -999,7 +1016,7 @@ pub mod test {
         public_inputs_ref[0] = tmp_pi_ref;
 
         proofs_ref[0] = proofs_ref[1];
-        assert!(PlonkKzgSnark::<E>::batch_verify::<T>(
+        assert!(PlonkKzgSnark::<E, UnivariateKzgPCS<E>>::batch_verify::<T>(
             &vks,
             &public_inputs_ref,
             &proofs_ref,
@@ -1068,7 +1085,7 @@ pub mod test {
         let rng = &mut test_rng();
         let n = 8;
         let max_degree = n + 2;
-        let srs = PlonkKzgSnark::<E>::universal_setup(max_degree, rng)?;
+        let srs = PlonkKzgSnark::<E, UnivariateKzgPCS<E>>::universal_setup(max_degree, rng)?;
 
         // 2. Create circuits
         let mut cs1: PlonkCircuit<E::Fr> = match plonk_type {
@@ -1086,21 +1103,37 @@ pub mod test {
         cs2.finalize_for_arithmetization()?;
 
         // 3. Preprocessing
-        let (pk1, vk1) = PlonkKzgSnark::<E>::preprocess(&srs, &cs1)?;
-        let (pk2, vk2) = PlonkKzgSnark::<E>::preprocess(&srs, &cs2)?;
+        let (pk1, vk1) = PlonkKzgSnark::<E, UnivariateKzgPCS<E>>::preprocess(&srs, &cs1)?;
+        let (pk2, vk2) = PlonkKzgSnark::<E, UnivariateKzgPCS<E>>::preprocess(&srs, &cs2)?;
 
         // 4. Proving
-        assert!(PlonkKzgSnark::<E>::prove::<_, _, T>(rng, &cs2, &pk1, None).is_err());
-        let proof2 = PlonkKzgSnark::<E>::prove::<_, _, T>(rng, &cs2, &pk2, None)?;
+        assert!(
+            PlonkKzgSnark::<E, UnivariateKzgPCS<E>>::prove::<_, _, T>(rng, &cs2, &pk1, None)
+                .is_err()
+        );
+        let proof2 =
+            PlonkKzgSnark::<E, UnivariateKzgPCS<E>>::prove::<_, _, T>(rng, &cs2, &pk2, None)?;
 
         // 5. Verification
-        assert!(PlonkKzgSnark::<E>::verify::<T>(&vk2, &[E::Fr::from(1u8)], &proof2, None,).is_ok());
+        assert!(PlonkKzgSnark::<E, UnivariateKzgPCS<E>>::verify::<T>(
+            &vk2,
+            &[E::Fr::from(1u8)],
+            &proof2,
+            None,
+        )
+        .is_ok());
         // wrong verification key
-        assert!(
-            PlonkKzgSnark::<E>::verify::<T>(&vk1, &[E::Fr::from(1u8)], &proof2, None,).is_err()
-        );
+        assert!(PlonkKzgSnark::<E, UnivariateKzgPCS<E>>::verify::<T>(
+            &vk1,
+            &[E::Fr::from(1u8)],
+            &proof2,
+            None,
+        )
+        .is_err());
         // wrong public input
-        assert!(PlonkKzgSnark::<E>::verify::<T>(&vk2, &[], &proof2, None).is_err());
+        assert!(
+            PlonkKzgSnark::<E, UnivariateKzgPCS<E>>::verify::<T>(&vk2, &[], &proof2, None).is_err()
+        );
 
         Ok(())
     }
@@ -1163,18 +1196,23 @@ pub mod test {
         let rng = &mut test_rng();
         let n = 64;
         let max_degree = n + 2;
-        let srs = PlonkKzgSnark::<E>::universal_setup(max_degree, rng)?;
+        let srs = PlonkKzgSnark::<E, UnivariateKzgPCS<E>>::universal_setup(max_degree, rng)?;
 
         // 2. Create the circuit
         let circuit = gen_circuit_for_test(10, 3, plonk_type)?;
         assert!(circuit.num_gates() <= n);
 
         // 3. Preprocessing
-        let (pk, _) = PlonkKzgSnark::<E>::preprocess(&srs, &circuit)?;
+        let (pk, _) = PlonkKzgSnark::<E, UnivariateKzgPCS<E>>::preprocess(&srs, &circuit)?;
 
         // 4. Proving
         let (_, oracles, challenges) =
-            PlonkKzgSnark::<E>::batch_prove_internal::<_, _, T>(rng, &[&circuit], &[&pk], None)?;
+            PlonkKzgSnark::<E, UnivariateKzgPCS<E>>::batch_prove_internal::<_, _, T>(
+                rng,
+                &[&circuit],
+                &[&pk],
+                None,
+            )?;
 
         // 5. Check that the targeted polynomials evaluate to zero on the vanishing set.
         check_plonk_prover_polynomials(plonk_type, &oracles[0], &pk, &challenges)?;
@@ -1185,7 +1223,7 @@ pub mod test {
     fn check_plonk_prover_polynomials<E: PairingEngine>(
         plonk_type: PlonkType,
         oracles: &Oracles<E::Fr>,
-        pk: &ProvingKey<E>,
+        pk: &ProvingKey<E, UnivariateKzgPCS<E>>,
         challenges: &Challenges<E::Fr>,
     ) -> Result<(), PlonkError> {
         check_circuit_polynomial_on_vanishing_set(oracles, pk)?;
@@ -1199,7 +1237,7 @@ pub mod test {
 
     fn check_circuit_polynomial_on_vanishing_set<E: PairingEngine>(
         oracles: &Oracles<E::Fr>,
-        pk: &ProvingKey<E>,
+        pk: &ProvingKey<E, UnivariateKzgPCS<E>>,
     ) -> Result<(), PlonkError> {
         let q_lc: Vec<&DensePolynomial<E::Fr>> =
             (0..GATE_WIDTH).map(|j| &pk.selectors[j]).collect();
@@ -1268,7 +1306,7 @@ pub mod test {
 
     fn check_perm_polynomials_on_vanishing_set<E: PairingEngine>(
         oracles: &Oracles<E::Fr>,
-        pk: &ProvingKey<E>,
+        pk: &ProvingKey<E, UnivariateKzgPCS<E>>,
         challenges: &Challenges<E::Fr>,
     ) -> Result<(), PlonkError> {
         let beta = challenges.beta;
@@ -1319,7 +1357,7 @@ pub mod test {
 
     fn check_lookup_polynomials_on_vanishing_set<E: PairingEngine>(
         oracles: &Oracles<E::Fr>,
-        pk: &ProvingKey<E>,
+        pk: &ProvingKey<E, UnivariateKzgPCS<E>>,
         challenges: &Challenges<E::Fr>,
     ) -> Result<(), PlonkError> {
         let beta = challenges.beta;
@@ -1423,11 +1461,12 @@ pub mod test {
         let rng = &mut ark_std::test_rng();
         let circuit = gen_circuit_for_test(3, 4, PlonkType::TurboPlonk)?;
         let max_degree = 80;
-        let srs = PlonkKzgSnark::<E>::universal_setup(max_degree, rng)?;
+        let srs = PlonkKzgSnark::<E, UnivariateKzgPCS<E>>::universal_setup(max_degree, rng)?;
 
-        let (pk, _) = PlonkKzgSnark::<E>::preprocess(&srs, &circuit)?;
-        let proof =
-            PlonkKzgSnark::<E>::prove::<_, _, StandardTranscript>(rng, &circuit, &pk, None)?;
+        let (pk, _) = PlonkKzgSnark::<E, UnivariateKzgPCS<E>>::preprocess(&srs, &circuit)?;
+        let proof = PlonkKzgSnark::<E, UnivariateKzgPCS<E>>::prove::<_, _, StandardTranscript>(
+            rng, &circuit, &pk, None,
+        )?;
 
         let base_fields: Vec<E::Fq> = proof.clone().into();
         let res: Proof<E> = base_fields.try_into()?;
@@ -1469,24 +1508,25 @@ pub mod test {
         let rng = &mut ark_std::test_rng();
         let circuit = gen_circuit_for_test(3, 4, plonk_type)?;
         let max_degree = 80;
-        let srs = PlonkKzgSnark::<E>::universal_setup(max_degree, rng)?;
+        let srs = PlonkKzgSnark::<E, UnivariateKzgPCS<E>>::universal_setup(max_degree, rng)?;
 
-        let (pk, vk) = PlonkKzgSnark::<E>::preprocess(&srs, &circuit)?;
-        let proof = PlonkKzgSnark::<E>::prove::<_, _, T>(rng, &circuit, &pk, None)?;
+        let (pk, vk) = PlonkKzgSnark::<E, UnivariateKzgPCS<E>>::preprocess(&srs, &circuit)?;
+        let proof =
+            PlonkKzgSnark::<E, UnivariateKzgPCS<E>>::prove::<_, _, T>(rng, &circuit, &pk, None)?;
 
         let mut ser_bytes = Vec::new();
         srs.serialize(&mut ser_bytes)?;
-        let de = UniversalSrs::<E>::deserialize(&ser_bytes[..])?;
+        let de = UniversalSrs::<E, UnivariateKzgPCS<E>>::deserialize(&ser_bytes[..])?;
         assert_eq!(de, srs);
 
         let mut ser_bytes = Vec::new();
         pk.serialize(&mut ser_bytes)?;
-        let de = ProvingKey::<E>::deserialize(&ser_bytes[..])?;
+        let de = ProvingKey::<E, UnivariateKzgPCS<E>>::deserialize(&ser_bytes[..])?;
         assert_eq!(de, pk);
 
         let mut ser_bytes = Vec::new();
         vk.serialize(&mut ser_bytes)?;
-        let de = VerifyingKey::<E>::deserialize(&ser_bytes[..])?;
+        let de = VerifyingKey::<E, UnivariateKzgPCS<E>>::deserialize(&ser_bytes[..])?;
         assert_eq!(de, vk);
 
         let mut ser_bytes = Vec::new();
@@ -1533,7 +1573,7 @@ pub mod test {
         let rng = &mut test_rng();
         let n = 128;
         let max_degree = n + 2;
-        let srs = PlonkKzgSnark::<E>::universal_setup(max_degree, rng)?;
+        let srs = PlonkKzgSnark::<E, UnivariateKzgPCS<E>>::universal_setup(max_degree, rng)?;
 
         // 2. Create many circuits with same domain size
         let circuits = (6..13)
@@ -1545,15 +1585,15 @@ pub mod test {
         let mut prove_keys = vec![];
         let mut verify_keys = vec![];
         for circuit in circuits.iter() {
-            let (pk, vk) = PlonkKzgSnark::<E>::preprocess(&srs, circuit)?;
+            let (pk, vk) = PlonkKzgSnark::<E, UnivariateKzgPCS<E>>::preprocess(&srs, circuit)?;
             prove_keys.push(pk);
             verify_keys.push(vk);
         }
-        let pks_ref: Vec<&ProvingKey<E>> = prove_keys.iter().collect();
-        let vks_ref: Vec<&VerifyingKey<E>> = verify_keys.iter().collect();
+        let pks_ref: Vec<&ProvingKey<E, UnivariateKzgPCS<E>>> = prove_keys.iter().collect();
+        let vks_ref: Vec<&VerifyingKey<E, UnivariateKzgPCS<E>>> = verify_keys.iter().collect();
 
         // 4. Batch Proving and verification
-        check_batch_prove_and_verify::<_, _, _, _, T>(rng, &cs_ref, &pks_ref, &vks_ref)?;
+        check_batch_prove_and_verify::<_, _, _, _, _, T>(rng, &cs_ref, &pks_ref, &vks_ref)?;
 
         // Batch proving with circuit/key aggregation
         //
@@ -1576,14 +1616,14 @@ pub mod test {
         let mut pks_type_a = vec![];
         let mut vks_type_a = vec![];
         for cs_a in type_a_circuits.iter() {
-            let (pk, vk) = PlonkKzgSnark::<E>::preprocess(&srs, cs_a)?;
+            let (pk, vk) = PlonkKzgSnark::<E, UnivariateKzgPCS<E>>::preprocess(&srs, cs_a)?;
             pks_type_a.push(pk);
             vks_type_a.push(vk);
         }
         let mut pks_type_b = vec![];
         let mut vks_type_b = vec![];
         for cs_b in type_b_circuits.iter() {
-            let (pk, vk) = PlonkKzgSnark::<E>::preprocess(&srs, cs_b)?;
+            let (pk, vk) = PlonkKzgSnark::<E, UnivariateKzgPCS<E>>::preprocess(&srs, cs_b)?;
             pks_type_b.push(pk);
             vks_type_b.push(vk);
         }
@@ -1601,35 +1641,37 @@ pub mod test {
             .collect::<Result<Vec<_>, PlonkError>>()?;
         // check that the merged keys are correct
         for (cs, vk) in circuits.iter().zip(vks.iter()) {
-            let (_, mut expected_vk) = PlonkKzgSnark::<E>::preprocess(&srs, cs)?;
+            let (_, mut expected_vk) =
+                PlonkKzgSnark::<E, UnivariateKzgPCS<E>>::preprocess(&srs, cs)?;
             expected_vk.is_merged = true;
             assert_eq!(*vk, expected_vk);
         }
 
-        let pks_ref: Vec<&ProvingKey<E>> = pks.iter().collect();
-        let vks_ref: Vec<&VerifyingKey<E>> = vks.iter().collect();
+        let pks_ref: Vec<&ProvingKey<E, _>> = pks.iter().collect();
+        let vks_ref: Vec<&VerifyingKey<E, _>> = vks.iter().collect();
 
         // 4. Batch Proving and verification
-        check_batch_prove_and_verify::<_, _, _, _, T>(rng, &cs_ref, &pks_ref, &vks_ref)?;
+        check_batch_prove_and_verify::<_, _, _, _, _, T>(rng, &cs_ref, &pks_ref, &vks_ref)?;
 
         Ok(())
     }
 
-    fn check_batch_prove_and_verify<E, F, P, R, T>(
+    fn check_batch_prove_and_verify<E, F, P, R, S, T>(
         rng: &mut R,
         cs_ref: &[&PlonkCircuit<E::Fr>],
-        pks_ref: &[&ProvingKey<E>],
-        vks_ref: &[&VerifyingKey<E>],
+        pks_ref: &[&ProvingKey<E, S>],
+        vks_ref: &[&VerifyingKey<E, S>],
     ) -> Result<(), PlonkError>
     where
         E: PairingEngine<Fq = F, G1Affine = GroupAffine<P>>,
         F: RescueParameter + SWToTEConParam,
         P: SWModelParameters<BaseField = F>,
         R: CryptoRng + RngCore,
+        S: UVPCS<E>,
         T: PlonkTranscript<F>,
     {
         // Batch Proving
-        let batch_proof = PlonkKzgSnark::<E>::batch_prove::<_, _, T>(rng, cs_ref, pks_ref)?;
+        let batch_proof = PlonkKzgSnark::<E, S>::batch_prove::<_, _, T>(rng, cs_ref, pks_ref)?;
 
         // Verification
         let public_inputs: Vec<Vec<E::Fr>> = cs_ref
@@ -1641,12 +1683,12 @@ pub mod test {
             .map(|pub_input| &pub_input[..])
             .collect();
         assert!(
-            PlonkKzgSnark::<E>::verify_batch_proof::<T>(vks_ref, &pi_ref, &batch_proof,).is_ok()
+            PlonkKzgSnark::<E, S>::verify_batch_proof::<T>(vks_ref, &pi_ref, &batch_proof,).is_ok()
         );
         let mut bad_pi_ref = pi_ref.clone();
         bad_pi_ref[0] = bad_pi_ref[1];
         assert!(
-            PlonkKzgSnark::<E>::verify_batch_proof::<T>(vks_ref, &bad_pi_ref, &batch_proof,)
+            PlonkKzgSnark::<E, S>::verify_batch_proof::<T>(vks_ref, &bad_pi_ref, &batch_proof,)
                 .is_err()
         );
 

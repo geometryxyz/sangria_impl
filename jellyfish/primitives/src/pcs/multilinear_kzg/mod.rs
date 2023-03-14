@@ -40,6 +40,8 @@ use batching::{batch_open_internal, batch_verify_internal};
 use srs::{MultilinearProverParam, MultilinearUniversalParams, MultilinearVerifierParam};
 use util::merge_polynomials;
 
+use super::WithMaxDegree;
+
 /// KZG Polynomial Commitment Scheme on multilinear polynomials.
 pub struct MultilinearKzgPCS<E: PairingEngine> {
     #[doc(hidden)]
@@ -66,6 +68,36 @@ pub struct MultilinearKzgBatchProof<E: PairingEngine> {
     pub q_x_opens: Vec<UnivariateKzgProof<E>>,
 }
 
+#[derive(Clone, Debug)]
+pub struct MultilinearKzgSRS<E: PairingEngine> {
+    /// The SRS for the multilinear part
+    pub multilinear_srs: MultilinearUniversalParams<E>,
+    /// The SRS for the univariate part
+    pub univariate_srs: UnivariateUniversalParams<E>,
+}
+
+impl<E: PairingEngine> WithMaxDegree for MultilinearKzgSRS<E> {
+    fn max_degree(&self) -> usize {
+        self.univariate_srs.max_degree()
+    }
+}
+
+impl<'a, E: PairingEngine>
+    Into<(
+        &'a MultilinearUniversalParams<E>,
+        &'a UnivariateUniversalParams<E>,
+    )> for &'a MultilinearKzgSRS<E>
+{
+    fn into(
+        self,
+    ) -> (
+        &'a MultilinearUniversalParams<E>,
+        &'a UnivariateUniversalParams<E>,
+    ) {
+        (&self.multilinear_srs, &self.univariate_srs)
+    }
+}
+
 impl<E: PairingEngine> PolynomialCommitmentScheme<E> for MultilinearKzgPCS<E> {
     // Parameters
     type ProverParam = (
@@ -73,7 +105,7 @@ impl<E: PairingEngine> PolynomialCommitmentScheme<E> for MultilinearKzgPCS<E> {
         UnivariateProverParam<E::G1Affine>,
     );
     type VerifierParam = (MultilinearVerifierParam<E>, UnivariateVerifierParam<E>);
-    type SRS = (MultilinearUniversalParams<E>, UnivariateUniversalParams<E>);
+    type SRS = MultilinearKzgSRS<E>;
     // Polynomial and its associated types
     type Polynomial = Rc<DenseMultilinearExtension<E::Fr>>;
     type Point = Vec<E::Fr>;
@@ -95,10 +127,10 @@ impl<E: PairingEngine> PolynomialCommitmentScheme<E> for MultilinearKzgPCS<E> {
         rng: &mut R,
         log_size: usize,
     ) -> Result<Self::SRS, PCSError> {
-        Ok((
-            MultilinearUniversalParams::<E>::gen_srs_for_testing(rng, log_size)?,
-            UnivariateUniversalParams::<E>::gen_srs_for_testing(rng, log_size)?,
-        ))
+        Ok(MultilinearKzgSRS {
+            multilinear_srs: MultilinearUniversalParams::<E>::gen_srs_for_testing(rng, log_size)?,
+            univariate_srs: UnivariateUniversalParams::<E>::gen_srs_for_testing(rng, log_size)?,
+        })
     }
 
     /// Trim the universal parameters to specialize the public parameters.
@@ -117,8 +149,9 @@ impl<E: PairingEngine> PolynomialCommitmentScheme<E> for MultilinearKzgPCS<E> {
                 ))
             },
         };
-        let (uni_ck, uni_vk) = srs.borrow().1.trim(supported_log_degree)?;
-        let (ml_ck, ml_vk) = srs.borrow().0.trim(supported_num_vars)?;
+        let (ml_srs, uni_srs) = srs.borrow().into();
+        let (uni_ck, uni_vk) = uni_srs.trim(supported_log_degree)?;
+        let (ml_ck, ml_vk) = ml_srs.trim(supported_num_vars)?;
 
         Ok(((ml_ck, uni_ck), (ml_vk, uni_vk)))
     }
@@ -447,7 +480,7 @@ mod tests {
     type Fr = <E as PairingEngine>::Fr;
 
     fn test_single_helper<R: RngCore + CryptoRng>(
-        params: &(MultilinearUniversalParams<E>, UnivariateUniversalParams<E>),
+        params: &MultilinearKzgSRS<E>,
         poly: &Rc<DenseMultilinearExtension<Fr>>,
         rng: &mut R,
     ) -> Result<(), PCSError> {

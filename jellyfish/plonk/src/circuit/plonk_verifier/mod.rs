@@ -12,7 +12,7 @@ use ark_ec::{
 };
 use ark_ff::{BigInteger, FpParameters, PrimeField};
 use ark_std::{format, string::ToString, vec, vec::Vec};
-use jf_primitives::rescue::RescueParameter;
+use jf_primitives::{pcs::PolynomialCommitmentScheme, rescue::RescueParameter};
 use jf_relation::{
     errors::{CircuitError, CircuitError::ParameterError},
     gadgets::{
@@ -52,9 +52,9 @@ pub struct VerifyingKeyVar<E: PairingEngine> {
 
 impl<E: PairingEngine> VerifyingKeyVar<E> {
     /// Create a variable for a Plonk verifying key.
-    pub fn new<F, P>(
+    pub fn new<F, P, S: PolynomialCommitmentScheme<E>>(
         circuit: &mut PlonkCircuit<F>,
-        verify_key: &VerifyingKey<E>,
+        verify_key: &VerifyingKey<E, S>,
     ) -> Result<Self, CircuitError>
     where
         E: PairingEngine<Fq = F, G1Affine = GroupAffine<P>>,
@@ -331,7 +331,7 @@ mod test {
     use ark_bls12_377::{g1::Parameters as Param377, Bls12_377, Fq as Fq377};
     use ark_ec::{ProjectiveCurve, SWModelParameters, TEModelParameters};
     use ark_std::{test_rng, vec, UniformRand};
-    use jf_primitives::rescue::RescueParameter;
+    use jf_primitives::{pcs::prelude::UnivariateKzgPCS, rescue::RescueParameter};
     use jf_relation::{
         gadgets::{ecc::Point, test_utils::test_variable_independence_for_circuit},
         Circuit, MergeableCircuitType,
@@ -356,7 +356,7 @@ mod test {
         let rng = &mut test_rng();
         let n = 32;
         let max_degree = n + 2;
-        let srs = PlonkKzgSnark::<E>::universal_setup(max_degree, rng)?;
+        let srs = PlonkKzgSnark::<E, UnivariateKzgPCS<E>>::universal_setup(max_degree, rng)?;
 
         // Setup instances and create verifying keys
         let mut vks_type_a = vec![];
@@ -368,8 +368,11 @@ mod test {
                 i,
                 MergeableCircuitType::TypeA,
             )?;
-            let instance =
-                BatchArgument::setup_instance(&srs, circuit, MergeableCircuitType::TypeA)?;
+            let instance = BatchArgument::setup_instance::<UnivariateKzgPCS<_>>(
+                &srs,
+                circuit,
+                MergeableCircuitType::TypeA,
+            )?;
             vks_type_a.push(instance.verify_key_ref().clone());
 
             let circuit = new_mergeable_circuit_for_test::<E>(
@@ -377,13 +380,18 @@ mod test {
                 i,
                 MergeableCircuitType::TypeB,
             )?;
-            let instance =
-                BatchArgument::setup_instance(&srs, circuit, MergeableCircuitType::TypeB)?;
+            let instance = BatchArgument::setup_instance::<UnivariateKzgPCS<_>>(
+                &srs,
+                circuit,
+                MergeableCircuitType::TypeB,
+            )?;
             vks_type_b.push(instance.verify_key_ref().clone());
         }
         // Compute merged verifying keys
-        let vks_type_a_ref: Vec<&VerifyingKey<E>> = vks_type_a.iter().collect();
-        let vks_type_b_ref: Vec<&VerifyingKey<E>> = vks_type_b.iter().collect();
+        let vks_type_a_ref: Vec<&VerifyingKey<E, UnivariateKzgPCS<E>>> =
+            vks_type_a.iter().collect();
+        let vks_type_b_ref: Vec<&VerifyingKey<E, UnivariateKzgPCS<E>>> =
+            vks_type_b.iter().collect();
         let merged_vks = BatchArgument::aggregate_verify_keys(&vks_type_a_ref, &vks_type_b_ref)?;
 
         // Check circuits
@@ -434,10 +442,10 @@ mod test {
         Ok(())
     }
 
-    fn check_vk_equality<E, F, P>(
+    fn check_vk_equality<E, F, P, S: PolynomialCommitmentScheme<E>>(
         circuit: &PlonkCircuit<F>,
         vk_var: &VerifyingKeyVar<E>,
-        vk: &VerifyingKey<E>,
+        vk: &VerifyingKey<E, S>,
     ) where
         E: PairingEngine<Fq = F, G1Affine = GroupAffine<P>>,
         F: PrimeField + SWToTEConParam,
@@ -477,7 +485,7 @@ mod test {
             // 1. Simulate universal setup
             let n = 1 << log_circuit_size;
             let max_degree = n + 2;
-            let srs = PlonkKzgSnark::<E>::universal_setup(max_degree, rng)?;
+            let srs = PlonkKzgSnark::<E, UnivariateKzgPCS<_>>::universal_setup(max_degree, rng)?;
 
             // 2. Setup instances
             let shared_public_input = E::Fr::rand(rng);
@@ -503,15 +511,18 @@ mod test {
                 instances_type_b.push(instance);
             }
             // 3. Batch Proving
-            let batch_proof =
-                BatchArgument::batch_prove::<_, T>(rng, &instances_type_a, &instances_type_b)?;
+            let batch_proof = BatchArgument::batch_prove::<_, UnivariateKzgPCS<_>, T>(
+                rng,
+                &instances_type_a,
+                &instances_type_b,
+            )?;
 
             // 4. Aggregate verification keys
-            let vks_type_a: Vec<&VerifyingKey<E>> = instances_type_a
+            let vks_type_a: Vec<&VerifyingKey<E, UnivariateKzgPCS<E>>> = instances_type_a
                 .iter()
                 .map(|pred| pred.verify_key_ref())
                 .collect();
-            let vks_type_b: Vec<&VerifyingKey<E>> = instances_type_b
+            let vks_type_b: Vec<&VerifyingKey<E, UnivariateKzgPCS<E>>> = instances_type_b
                 .iter()
                 .map(|pred| pred.verify_key_ref())
                 .collect();
@@ -523,7 +534,7 @@ mod test {
             let open_key_ref = &vks_type_a[0].open_key;
             let beta_g_ref = &srs.powers_of_g[1];
             let blinding_factor = E::Fr::rand(rng);
-            let (inner1, inner2) = BatchArgument::partial_verify::<T>(
+            let (inner1, inner2) = BatchArgument::partial_verify::<T, UnivariateKzgPCS<E>>(
                 beta_g_ref,
                 &open_key_ref.g,
                 &merged_vks,
@@ -531,7 +542,7 @@ mod test {
                 &batch_proof,
                 blinding_factor,
             )?;
-            assert!(BatchArgument::decide(open_key_ref, inner1, inner2)?);
+            assert!(BatchArgument::decide::<UnivariateKzgPCS<E>>(open_key_ref, inner1, inner2)?);
 
             {
                 // =======================================
@@ -539,7 +550,7 @@ mod test {
                 // =======================================
                 let public_inputs = [[field_switching(&shared_public_input)].as_ref()].concat();
 
-                let (mut circuit, partial_verify_points) = build_circuit::<E, F, P>(
+                let (mut circuit, partial_verify_points) = build_circuit::<E, F, P, _>(
                     &shared_public_input,
                     &merged_vks,
                     &batch_proof,
@@ -599,7 +610,7 @@ mod test {
                 // should not be able to generate circuit
                 let mut wrong_merge_vks = merged_vks.clone();
                 let tmp = wrong_merge_vks.pop().unwrap();
-                assert!(build_circuit::<E, F, P>(
+                assert!(build_circuit::<E, F, P, UnivariateKzgPCS<E>>(
                     &shared_public_input,
                     &wrong_merge_vks,
                     &batch_proof,
@@ -613,7 +624,7 @@ mod test {
                 // should not be able to generate circuit
                 let mut wrong_merge_vks = merged_vks.clone();
                 wrong_merge_vks.push(tmp);
-                assert!(build_circuit::<E, F, P>(
+                assert!(build_circuit::<E, F, P, UnivariateKzgPCS<E>>(
                     &shared_public_input,
                     &wrong_merge_vks,
                     &batch_proof,
@@ -632,7 +643,7 @@ mod test {
                 // instance inputs = satisfiability inputs != partial verify inputs
                 let public_inputs = [[field_switching(&shared_public_input)].as_ref()].concat();
                 let wrong_shared_public_input = E::Fr::rand(rng);
-                let (circuit, partial_verify_points) = build_circuit::<E, F, P>(
+                let (circuit, partial_verify_points) = build_circuit::<E, F, P, UnivariateKzgPCS<E>>(
                     &wrong_shared_public_input,
                     &merged_vks,
                     &batch_proof,
@@ -685,9 +696,9 @@ mod test {
         Ok(())
     }
 
-    fn build_circuit<E, F, P>(
+    fn build_circuit<E, F, P, S: PolynomialCommitmentScheme<E>>(
         shared_public_input: &E::Fr,
-        merged_vks: &[VerifyingKey<E>],
+        merged_vks: &[VerifyingKey<E, S>],
         batch_proof: &BatchProof<E>,
         beta_g_ref: &GroupAffine<P>,
         generator_g: &GroupAffine<P>,
@@ -763,7 +774,7 @@ mod test {
         // 1. Simulate universal setup
         let n = 1 << i;
         let max_degree = n + 2;
-        let srs = PlonkKzgSnark::<E>::universal_setup(max_degree, rng)?;
+        let srs = PlonkKzgSnark::<E, UnivariateKzgPCS<_>>::universal_setup(max_degree, rng)?;
 
         for _ in 0..2 {
             // =======================================
@@ -794,15 +805,18 @@ mod test {
             instances_type_b.push(instance);
 
             // 3. Batch Proving
-            let batch_proof =
-                BatchArgument::batch_prove::<_, T>(rng, &instances_type_a, &instances_type_b)?;
+            let batch_proof = BatchArgument::batch_prove::<_, UnivariateKzgPCS<_>, T>(
+                rng,
+                &instances_type_a,
+                &instances_type_b,
+            )?;
 
             // 4. Aggregate verification keys
-            let vks_type_a: Vec<&VerifyingKey<E>> = instances_type_a
+            let vks_type_a: Vec<&VerifyingKey<E, _>> = instances_type_a
                 .iter()
                 .map(|pred| pred.verify_key_ref())
                 .collect();
-            let vks_type_b: Vec<&VerifyingKey<E>> = instances_type_b
+            let vks_type_b: Vec<&VerifyingKey<E, _>> = instances_type_b
                 .iter()
                 .map(|pred| pred.verify_key_ref())
                 .collect();
@@ -813,14 +827,15 @@ mod test {
             let beta_g_ref = &srs.powers_of_g[1];
             let blinding_factor = E::Fr::rand(rng);
 
-            let (mut circuit, _partial_verify_points) = build_circuit::<E, F, P>(
-                &shared_public_input,
-                &merged_vks,
-                &batch_proof,
-                beta_g_ref,
-                &open_key_ref.g,
-                &blinding_factor,
-            )?;
+            let (mut circuit, _partial_verify_points) =
+                build_circuit::<E, F, P, UnivariateKzgPCS<E>>(
+                    &shared_public_input,
+                    &merged_vks,
+                    &batch_proof,
+                    beta_g_ref,
+                    &open_key_ref.g,
+                    &blinding_factor,
+                )?;
 
             circuit.finalize_for_arithmetization()?;
             circuits.push(circuit);

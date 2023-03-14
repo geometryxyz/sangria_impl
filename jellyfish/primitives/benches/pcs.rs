@@ -28,8 +28,8 @@ fn bench_pcs() -> Result<(), PCSError> {
         };
 
         let poly = Rc::new(DenseMultilinearExtension::rand(nv, &mut rng));
-        let (ml_ck, ml_vk) = uni_params.0.trim(nv)?;
-        let (uni_ck, uni_vk) = uni_params.1.trim(nv)?;
+        let (ml_ck, ml_vk) = uni_params.multilinear_srs.trim(nv)?;
+        let (uni_ck, uni_vk) = uni_params.univariate_srs.trim(nv)?;
         let ck = (ml_ck, uni_ck);
         let vk = (ml_vk, uni_vk);
 
