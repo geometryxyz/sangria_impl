@@ -1,10 +1,10 @@
+use crate::vector_commitment::HomomorphicCommitmentScheme;
 use ark_ff::PrimeField;
 use ark_sponge::{
     poseidon::{PoseidonParameters, PoseidonSponge},
     Absorb, CryptographicSponge, FieldBasedCryptographicSponge,
 };
 use ark_std::{marker::PhantomData, rand::Rng};
-use crate::vector_commitment::HomomorphicCommitmentScheme;
 
 use crate::{
     NonInteractiveFoldingScheme, PLONKCircuit, RelaxedPLONKInstance, RelaxedPLONKWitness,
@@ -65,11 +65,11 @@ where
     F: PrimeField,
     Comm: FoldingCommitmentConfig<F>,
 {
-    fn to_sponge_bytes(&self, dest: &mut Vec<u8>) {
+    fn to_sponge_bytes(&self, _dest: &mut Vec<u8>) {
         todo!()
     }
 
-    fn to_sponge_field_elements<SpongeF: PrimeField>(&self, dest: &mut Vec<SpongeF>) {
+    fn to_sponge_field_elements<SpongeF: PrimeField>(&self, _dest: &mut Vec<SpongeF>) {
         todo!()
     }
 }
@@ -99,11 +99,11 @@ where
     F: PrimeField,
     Comm: FoldingCommitmentConfig<F>,
 {
-    fn to_sponge_bytes(&self, dest: &mut Vec<u8>) {
+    fn to_sponge_bytes(&self, _dest: &mut Vec<u8>) {
         todo!()
     }
 
-    fn to_sponge_field_elements<SpongeF: PrimeField>(&self, dest: &mut Vec<SpongeF>) {
+    fn to_sponge_field_elements<SpongeF: PrimeField>(&self, _dest: &mut Vec<SpongeF>) {
         todo!()
     }
 }
@@ -190,12 +190,12 @@ where
     }
 
     fn prover(
-        public_parameters: &Self::PublicParameters,
-        prover_key: &Self::ProverKey,
-        left_instance: &Self::Instance,
-        left_witness: &Self::Witness,
-        right_instance: &Self::Instance,
-        right_witness: &Self::Witness,
+        _public_parameters: &Self::PublicParameters,
+        _prover_key: &Self::ProverKey,
+        _left_instance: &Self::Instance,
+        _left_witness: &Self::Witness,
+        _right_instance: &Self::Instance,
+        _right_witness: &Self::Witness,
     ) -> Result<(Self::Instance, Self::Witness, Self::ProverMessage), SangriaError> {
         todo!()
     }

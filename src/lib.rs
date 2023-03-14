@@ -97,6 +97,7 @@ pub trait NonInteractiveFoldingScheme {
     ) -> Result<(Self::ProverKey, Self::VerifierKey), SangriaError>;
 
     /// The folding scheme prover. Outputs a folded instance-witness pair and the prover's message.
+    #[allow(clippy::type_complexity)]
     fn prover(
         public_parameters: &Self::PublicParameters,
         prover_key: &Self::ProverKey,
