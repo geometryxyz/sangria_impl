@@ -23,7 +23,7 @@ use ark_std::{
 use core::iter::FromIterator;
 
 /// Evaluations over {0,1}^n for G1 or G2
-#[derive(CanonicalSerialize, CanonicalDeserialize, Clone, Debug)]
+#[derive(CanonicalSerialize, CanonicalDeserialize, Clone, Debug, PartialEq, Eq)]
 pub struct Evaluations<C: AffineCurve> {
     /// The evaluations.
     pub evals: Vec<C>,
@@ -39,7 +39,7 @@ pub struct MultilinearUniversalParams<E: PairingEngine> {
 }
 
 /// Prover Parameters
-#[derive(CanonicalSerialize, CanonicalDeserialize, Clone, Debug)]
+#[derive(CanonicalSerialize, CanonicalDeserialize, Clone, Debug, PartialEq, Eq)]
 pub struct MultilinearProverParam<E: PairingEngine> {
     /// number of variables
     pub num_vars: usize,
@@ -54,7 +54,7 @@ pub struct MultilinearProverParam<E: PairingEngine> {
 }
 
 /// Verifier Parameters
-#[derive(CanonicalSerialize, CanonicalDeserialize, Clone, Debug)]
+#[derive(CanonicalSerialize, CanonicalDeserialize, Clone, Debug, PartialEq, Eq)]
 pub struct MultilinearVerifierParam<E: PairingEngine> {
     /// number of variables
     pub num_vars: usize,

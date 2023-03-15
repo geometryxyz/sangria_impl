@@ -14,6 +14,7 @@ mod univariate_kzg;
 
 use ark_ec::PairingEngine;
 use ark_ff::Field;
+use ark_poly::univariate::DensePolynomial;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use ark_std::{
     borrow::Borrow,
@@ -23,17 +24,64 @@ use ark_std::{
     vec::Vec,
 };
 use errors::PCSError;
+use prelude::UnivariateVerifierParam;
 
+use self::prelude::Commitment;
+
+/// A more restricted variant of the `PolynomialCommitmentScheme` trait
+// TODO(fga): this should be resolved by https://github.com/rust-lang/rust/issues/41517
+// type UVPCS<E> = PolynomialCommitmentScheme<E, Polynomial = DensePolynomial<E::Fr>, Commitment = Commitment<E>>;
+pub trait UVPCS<E: PairingEngine>:
+    PolynomialCommitmentScheme<
+        E,
+        Polynomial = DensePolynomial<<E as PairingEngine>::Fr>,
+        Commitment = Commitment<E>,
+        BatchCommitment = Vec<Commitment<E>>,
+        VerifierParam = UnivariateVerifierParam<E>,
+    > + Sync
+{
+}
+
+impl<
+        E: PairingEngine,
+        S: PolynomialCommitmentScheme<
+                E,
+                Polynomial = DensePolynomial<<E as PairingEngine>::Fr>,
+                Commitment = Commitment<E>,
+                BatchCommitment = Vec<Commitment<E>>,
+                VerifierParam = UnivariateVerifierParam<E>,
+            > + Sync,
+    > UVPCS<E> for S
+{
+}
+
+/// This trait defines the max degree supported by an SRS
+pub trait WithMaxDegree {
+    /// Returns the max degree supported by the SRS
+    fn max_degree(&self) -> usize;
+}
 /// This trait defines APIs for polynomial commitment schemes.
 /// Note that for our usage, this PCS is not hiding.
 /// TODO(#187): add hiding property.
 pub trait PolynomialCommitmentScheme<E: PairingEngine> {
     /// Prover parameters
-    type ProverParam: Clone;
+    type ProverParam: Clone
+        + Debug
+        + CanonicalSerialize
+        + CanonicalDeserialize
+        + PartialEq
+        + Eq
+        + Sync;
     /// Verifier parameters
-    type VerifierParam: Clone + CanonicalSerialize + CanonicalDeserialize;
+    type VerifierParam: Clone
+        + Debug
+        + CanonicalSerialize
+        + CanonicalDeserialize
+        + PartialEq
+        + Eq
+        + Sync;
     /// Structured reference string
-    type SRS: Clone + Debug;
+    type SRS: Clone + Debug + WithMaxDegree;
     /// Polynomial and its associated types
     type Polynomial: Clone
         + Debug

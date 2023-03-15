@@ -454,7 +454,7 @@ mod test {
     use super::*;
     use crate::{
         proof_system::{
-            batch_arg::{new_mergeable_circuit_for_test, BatchArgument},
+            batch_arg::{new_mergeable_circuit_for_test, BatchArgument, Instance},
             PlonkKzgSnark, UniversalSNARK,
         },
         transcript::{PlonkTranscript, RescueTranscript},
@@ -462,7 +462,7 @@ mod test {
     use ark_bls12_377::{g1::Parameters as Param377, Bls12_377};
     use ark_ec::{SWModelParameters, TEModelParameters};
     use ark_std::{test_rng, vec, UniformRand};
-    use jf_primitives::rescue::RescueParameter;
+    use jf_primitives::{pcs::prelude::UnivariateKzgPCS, rescue::RescueParameter};
     use jf_relation::{Circuit, MergeableCircuitType};
     use jf_utils::field_switching;
 
@@ -485,11 +485,11 @@ mod test {
         let rng = &mut test_rng();
         let n = 128;
         let max_degree = n + 2;
-        let srs = PlonkKzgSnark::<E>::universal_setup(max_degree, rng)?;
+        let srs = PlonkKzgSnark::<E, UnivariateKzgPCS<E>>::universal_setup(max_degree, rng)?;
 
         // 2. Setup instances
         let shared_public_input = E::Fr::rand(rng);
-        let mut instances_type_a = vec![];
+        let mut instances_type_a: Vec<Instance<E, UnivariateKzgPCS<E>>> = vec![];
         let mut instances_type_b = vec![];
         for i in 32..50 {
             let circuit = new_mergeable_circuit_for_test::<E>(
@@ -512,14 +512,14 @@ mod test {
         }
         // 3. Batch Proving
         let batch_proof =
-            BatchArgument::batch_prove::<_, T>(rng, &instances_type_a, &instances_type_b)?;
+            BatchArgument::batch_prove::<_, _, T>(rng, &instances_type_a, &instances_type_b)?;
 
         // 4. Aggregate verification keys
-        let vks_type_a: Vec<&VerifyingKey<E>> = instances_type_a
+        let vks_type_a: Vec<&VerifyingKey<E, UnivariateKzgPCS<E>>> = instances_type_a
             .iter()
             .map(|pred| pred.verify_key_ref())
             .collect();
-        let vks_type_b: Vec<&VerifyingKey<E>> = instances_type_b
+        let vks_type_b: Vec<&VerifyingKey<E, UnivariateKzgPCS<E>>> = instances_type_b
             .iter()
             .map(|pred| pred.verify_key_ref())
             .collect();
@@ -531,7 +531,7 @@ mod test {
         let open_key_ref = &vks_type_a[0].open_key;
         let beta_g_ref = &srs.powers_of_g[1];
         let blinding_factor = E::Fr::rand(rng);
-        let (inner1, inner2) = BatchArgument::partial_verify::<T>(
+        let (inner1, inner2) = BatchArgument::partial_verify::<T, UnivariateKzgPCS<E>>(
             beta_g_ref,
             &open_key_ref.g,
             &merged_vks,
@@ -539,7 +539,11 @@ mod test {
             &batch_proof,
             blinding_factor,
         )?;
-        assert!(BatchArgument::decide(open_key_ref, inner1, inner2)?);
+        assert!(BatchArgument::decide::<UnivariateKzgPCS<E>>(
+            open_key_ref,
+            inner1,
+            inner2
+        )?);
 
         // =======================================
         // begin challenge circuit

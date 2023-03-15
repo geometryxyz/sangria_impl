@@ -4,7 +4,7 @@
 // You should have received a copy of the MIT License
 // along with the Jellyfish library. If not, see <https://mit-license.org/>.
 
-use core::ops::Neg;
+use core::{marker::PhantomData, ops::Neg};
 
 use super::structs::{
     eval_merged_lookup_witness, eval_merged_table, Challenges, Oracles, PlookupEvaluations,
@@ -27,10 +27,7 @@ use ark_std::{
     vec,
     vec::Vec,
 };
-use jf_primitives::pcs::{
-    prelude::{Commitment, UnivariateKzgPCS},
-    PolynomialCommitmentScheme,
-};
+use jf_primitives::pcs::{prelude::Commitment, UVPCS};
 use jf_relation::{constants::GATE_WIDTH, Arithmetization};
 use jf_utils::par_utils::parallelizable_slice_iter;
 #[cfg(feature = "parallel")]
@@ -42,12 +39,13 @@ type CommitmentsAndPolys<E> = (
 );
 
 /// A Plonk IOP prover.
-pub(crate) struct Prover<E: PairingEngine> {
+pub(crate) struct Prover<E: PairingEngine, S> {
     domain: Radix2EvaluationDomain<E::Fr>,
     quot_domain: GeneralEvaluationDomain<E::Fr>,
+    _phantom: PhantomData<S>,
 }
 
-impl<E: PairingEngine> Prover<E> {
+impl<E: PairingEngine, S: UVPCS<E>> Prover<E, S> {
     /// Construct a Plonk prover that uses a domain with size `domain_size` and
     /// quotient polynomial domain with a size that is larger than the degree of
     /// the quotient polynomial.
@@ -63,6 +61,7 @@ impl<E: PairingEngine> Prover<E> {
         Ok(Self {
             domain,
             quot_domain,
+            _phantom: PhantomData,
         })
     }
 
@@ -74,7 +73,7 @@ impl<E: PairingEngine> Prover<E> {
     pub(crate) fn run_1st_round<C: Arithmetization<E::Fr>, R: CryptoRng + RngCore>(
         &self,
         prng: &mut R,
-        ck: &CommitKey<E>,
+        ck: &CommitKey<E, S>,
         cs: &C,
     ) -> Result<(CommitmentsAndPolys<E>, DensePolynomial<E::Fr>), PlonkError> {
         let wire_polys: Vec<DensePolynomial<E::Fr>> = cs
@@ -82,7 +81,7 @@ impl<E: PairingEngine> Prover<E> {
             .into_iter()
             .map(|poly| self.mask_polynomial(prng, poly, 1))
             .collect();
-        let wires_poly_comms = UnivariateKzgPCS::batch_commit(ck, &wire_polys)?;
+        let wires_poly_comms = S::batch_commit(ck, &wire_polys[..])?;
         let pub_input_poly = cs.compute_pub_input_polynomial()?;
         Ok(((wires_poly_comms, wire_polys), pub_input_poly))
     }
@@ -96,7 +95,7 @@ impl<E: PairingEngine> Prover<E> {
     pub(crate) fn run_plookup_1st_round<C: Arithmetization<E::Fr>, R: CryptoRng + RngCore>(
         &self,
         prng: &mut R,
-        ck: &CommitKey<E>,
+        ck: &CommitKey<E, S>,
         cs: &C,
         tau: E::Fr,
     ) -> Result<(CommitmentsAndPolys<E>, Vec<E::Fr>, Vec<E::Fr>), PlonkError> {
@@ -106,7 +105,7 @@ impl<E: PairingEngine> Prover<E> {
         let h_1_poly = self.mask_polynomial(prng, h_1_poly, 2);
         let h_2_poly = self.mask_polynomial(prng, h_2_poly, 2);
         let h_polys = vec![h_1_poly, h_2_poly];
-        let h_poly_comms = UnivariateKzgPCS::batch_commit(ck, &h_polys)?;
+        let h_poly_comms = S::batch_commit(ck, &h_polys[..])?;
         Ok(((h_poly_comms, h_polys), sorted_vec, merged_lookup_table))
     }
 
@@ -115,7 +114,7 @@ impl<E: PairingEngine> Prover<E> {
     pub(crate) fn run_2nd_round<C: Arithmetization<E::Fr>, R: CryptoRng + RngCore>(
         &self,
         prng: &mut R,
-        ck: &CommitKey<E>,
+        ck: &CommitKey<E, S>,
         cs: &C,
         challenges: &Challenges<E::Fr>,
     ) -> Result<(Commitment<E>, DensePolynomial<E::Fr>), PlonkError> {
@@ -124,7 +123,7 @@ impl<E: PairingEngine> Prover<E> {
             cs.compute_prod_permutation_polynomial(&challenges.beta, &challenges.gamma)?,
             2,
         );
-        let prod_perm_comm = UnivariateKzgPCS::commit(ck, &prod_perm_poly)?;
+        let prod_perm_comm = S::commit(ck, &prod_perm_poly)?;
         Ok((prod_perm_comm, prod_perm_poly))
     }
 
@@ -134,7 +133,7 @@ impl<E: PairingEngine> Prover<E> {
     pub(crate) fn run_plookup_2nd_round<C: Arithmetization<E::Fr>, R: CryptoRng + RngCore>(
         &self,
         prng: &mut R,
-        ck: &CommitKey<E>,
+        ck: &CommitKey<E, S>,
         cs: &C,
         challenges: &Challenges<E::Fr>,
         merged_lookup_table: Option<&Vec<E::Fr>>,
@@ -157,7 +156,7 @@ impl<E: PairingEngine> Prover<E> {
             )?,
             2,
         );
-        let prod_lookup_comm = UnivariateKzgPCS::commit(ck, &prod_lookup_poly)?;
+        let prod_lookup_comm = S::commit(ck, &prod_lookup_poly)?;
         Ok((prod_lookup_comm, prod_lookup_poly))
     }
 
@@ -167,8 +166,8 @@ impl<E: PairingEngine> Prover<E> {
     pub(crate) fn run_3rd_round<R: CryptoRng + RngCore>(
         &self,
         prng: &mut R,
-        ck: &CommitKey<E>,
-        pks: &[&ProvingKey<E>],
+        ck: &CommitKey<E, S>,
+        pks: &[&ProvingKey<E, S>],
         challenges: &Challenges<E::Fr>,
         online_oracles: &[Oracles<E::Fr>],
         num_wire_types: usize,
@@ -176,7 +175,7 @@ impl<E: PairingEngine> Prover<E> {
         let quot_poly =
             self.compute_quotient_polynomial(challenges, pks, online_oracles, num_wire_types)?;
         let split_quot_polys = self.split_quotient_polynomial(prng, &quot_poly, num_wire_types)?;
-        let split_quot_poly_comms = UnivariateKzgPCS::batch_commit(ck, &split_quot_polys)?;
+        let split_quot_poly_comms = S::batch_commit(ck, &split_quot_polys)?;
 
         Ok((split_quot_poly_comms, split_quot_polys))
     }
@@ -188,7 +187,7 @@ impl<E: PairingEngine> Prover<E> {
     /// Return evaluations of the Plonk proof.
     pub(crate) fn compute_evaluations(
         &self,
-        pk: &ProvingKey<E>,
+        pk: &ProvingKey<E, S>,
         challenges: &Challenges<E::Fr>,
         online_oracles: &Oracles<E::Fr>,
         num_wire_types: usize,
@@ -215,7 +214,7 @@ impl<E: PairingEngine> Prover<E> {
     /// polynomials
     pub(crate) fn compute_plookup_evaluations(
         &self,
-        pk: &ProvingKey<E>,
+        pk: &ProvingKey<E, S>,
         challenges: &Challenges<E::Fr>,
         online_oracles: &Oracles<E::Fr>,
     ) -> Result<PlookupEvaluations<E::Fr>, PlonkError> {
@@ -282,7 +281,7 @@ impl<E: PairingEngine> Prover<E> {
     pub(crate) fn compute_non_quotient_component_for_lin_poly(
         &self,
         alpha_base: E::Fr,
-        pk: &ProvingKey<E>,
+        pk: &ProvingKey<E, S>,
         challenges: &Challenges<E::Fr>,
         online_oracles: &Oracles<E::Fr>,
         poly_evals: &ProofEvaluations<E::Fr>,
@@ -341,8 +340,8 @@ impl<E: PairingEngine> Prover<E> {
     /// `zeta * domain_generator`. TODO: Parallelize the computation.
     pub(crate) fn compute_opening_proofs(
         &self,
-        ck: &CommitKey<E>,
-        pks: &[&ProvingKey<E>],
+        ck: &CommitKey<E, S>,
+        pks: &[&ProvingKey<E, S>],
         zeta: &E::Fr,
         v: &E::Fr,
         online_oracles: &[Oracles<E::Fr>],
@@ -400,13 +399,14 @@ impl<E: PairingEngine> Prover<E> {
 }
 
 /// Private helper methods
-impl<E: PairingEngine> Prover<E> {
+impl<E: PairingEngine, S: UVPCS<E>> Prover<E, S>
+{
     /// Return the list of plookup polynomials to be opened at point `zeta`
     /// The order should be consistent with the verifier side.
     #[inline]
     fn plookup_open_polys_ref<'a>(
         oracles: &'a Oracles<E::Fr>,
-        pk: &'a ProvingKey<E>,
+        pk: &'a ProvingKey<E, S>,
     ) -> Result<Vec<&'a DensePolynomial<E::Fr>>, PlonkError> {
         Ok(vec![
             &pk.plookup_pk.as_ref().unwrap().range_table_poly,
@@ -423,7 +423,7 @@ impl<E: PairingEngine> Prover<E> {
     #[inline]
     fn plookup_shifted_open_polys_ref<'a>(
         oracles: &'a Oracles<E::Fr>,
-        pk: &'a ProvingKey<E>,
+        pk: &'a ProvingKey<E, S>,
     ) -> Result<Vec<&'a DensePolynomial<E::Fr>>, PlonkError> {
         Ok(vec![
             &oracles.plookup_oracles.prod_lookup_poly,
@@ -446,15 +446,15 @@ impl<E: PairingEngine> Prover<E> {
         poly: DensePolynomial<E::Fr>,
         hiding_bound: usize,
     ) -> DensePolynomial<E::Fr> {
-        let mask_poly =
-            DensePolynomial::rand(hiding_bound, prng).mul_by_vanishing_poly(self.domain);
+        let mask_poly = <DensePolynomial<E::Fr> as UVPolynomial<E::Fr>>::rand(hiding_bound, prng)
+            .mul_by_vanishing_poly(self.domain);
         mask_poly + poly
     }
 
     /// Return a batched opening proof given a list of polynomials `polys_ref`,
     /// evaluation point `eval_point`, and randomized combiner `r`.
     fn compute_batched_witness_polynomial_commitment(
-        ck: &CommitKey<E>,
+        ck: &CommitKey<E, S>,
         polys_ref: &[&DensePolynomial<E::Fr>],
         r: &E::Fr,
         eval_point: &E::Fr,
@@ -469,14 +469,14 @@ impl<E: PairingEngine> Prover<E> {
         let divisor = DensePolynomial::from_coefficients_vec(vec![-*eval_point, E::Fr::one()]);
         let witness_poly = &batch_poly / &divisor;
 
-        UnivariateKzgPCS::commit(ck, &witness_poly).map_err(PlonkError::PCSError)
+        S::commit(ck, &witness_poly).map_err(PlonkError::PCSError)
     }
 
     /// Compute the quotient polynomial via (i)FFTs.
     fn compute_quotient_polynomial(
         &self,
         challenges: &Challenges<E::Fr>,
-        pks: &[&ProvingKey<E>],
+        pks: &[&ProvingKey<E, S>],
         online_oracles: &[Oracles<E::Fr>],
         num_wire_types: usize,
     ) -> Result<DensePolynomial<E::Fr>, PlonkError> {
@@ -694,7 +694,7 @@ impl<E: PairingEngine> Prover<E> {
     fn compute_quotient_copy_constraint_contribution(
         i: usize,
         eval_point: E::Fr,
-        pk: &ProvingKey<E>,
+        pk: &ProvingKey<E, S>,
         w: &[E::Fr],
         z_x: &E::Fr,
         z_xw: &E::Fr,
@@ -752,7 +752,7 @@ impl<E: PairingEngine> Prover<E> {
         &self,
         i: usize,
         eval_point: E::Fr,
-        pk: &ProvingKey<E>,
+        pk: &ProvingKey<E, S>,
         w: &[E::Fr],
         w_next: &[E::Fr],
         h_coset_ffts: &[Vec<E::Fr>],
@@ -927,7 +927,7 @@ impl<E: PairingEngine> Prover<E> {
 
     // Compute the circuit part of the linearization polynomial
     fn compute_lin_poly_circuit_contribution(
-        pk: &ProvingKey<E>,
+        pk: &ProvingKey<E, S>,
         w_evals: &[E::Fr],
     ) -> DensePolynomial<E::Fr> {
         // The selectors order: q_lc, q_mul, q_hash, q_o, q_c, q_ecc
@@ -961,7 +961,7 @@ impl<E: PairingEngine> Prover<E> {
 
     // Compute the wire permutation part of the linearization polynomial
     fn compute_lin_poly_copy_constraint_contribution(
-        pk: &ProvingKey<E>,
+        pk: &ProvingKey<E, S>,
         challenges: &Challenges<E::Fr>,
         poly_evals: &ProofEvaluations<E::Fr>,
         prod_perm_poly: &DensePolynomial<E::Fr>,
@@ -1001,7 +1001,7 @@ impl<E: PairingEngine> Prover<E> {
     // Compute the Plookup part of the linearization polynomial
     fn compute_lin_poly_plookup_contribution(
         &self,
-        pk: &ProvingKey<E>,
+        pk: &ProvingKey<E, S>,
         challenges: &Challenges<E::Fr>,
         w_evals: &[E::Fr],
         plookup_evals: &PlookupEvaluations<E::Fr>,
@@ -1098,6 +1098,7 @@ mod test {
     use ark_bn254::Bn254;
     use ark_bw6_761::BW6_761;
     use ark_std::test_rng;
+    use jf_primitives::pcs::prelude::UnivariateKzgPCS;
 
     #[test]
     fn test_split_quotient_polynomial_wrong_degree() -> Result<(), PlonkError> {
@@ -1109,9 +1110,9 @@ mod test {
 
     fn test_split_quotient_polynomial_wrong_degree_helper<E: PairingEngine>(
     ) -> Result<(), PlonkError> {
-        let prover = Prover::<E>::new(4, GATE_WIDTH + 1)?;
+        let prover = Prover::<E, UnivariateKzgPCS<E>>::new(4, GATE_WIDTH + 1)?;
         let rng = &mut test_rng();
-        let bad_quot_poly = DensePolynomial::<E::Fr>::rand(25, rng);
+        let bad_quot_poly = <DensePolynomial<E::Fr> as UVPolynomial<E::Fr>>::rand(25, rng);
         assert!(prover
             .split_quotient_polynomial(rng, &bad_quot_poly, GATE_WIDTH + 1)
             .is_err());

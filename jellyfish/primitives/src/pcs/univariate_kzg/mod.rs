@@ -31,6 +31,7 @@ use srs::{UnivariateProverParam, UnivariateUniversalParams, UnivariateVerifierPa
 
 pub(crate) mod srs;
 
+#[derive(Debug, PartialEq, Eq, Clone)]
 /// KZG Polynomial Commitment Scheme on univariate polynomial.
 pub struct UnivariateKzgPCS<E: PairingEngine> {
     #[doc(hidden)]

@@ -24,6 +24,7 @@ use jf_plonk::{
     proof_system::{PlonkKzgSnark, UniversalSNARK},
     transcript::StandardTranscript,
 };
+use jf_primitives::pcs::prelude::UnivariateKzgPCS;
 use jf_relation::{gadgets::ecc::Point, Arithmetization, Circuit, PlonkCircuit};
 use jf_utils::fr_to_fq;
 use rand_chacha::ChaCha20Rng;
@@ -50,25 +51,29 @@ fn main() -> Result<(), PlonkError> {
     //
     // The required SRS size can be obtained from the circuit.
     let srs_size = circuit.srs_size()?;
-    let srs = PlonkKzgSnark::<Bls12_381>::universal_setup(srs_size, &mut rng)?;
+    let srs = PlonkKzgSnark::<Bls12_381, UnivariateKzgPCS<Bls12_381>>::universal_setup(
+        srs_size, &mut rng,
+    )?;
 
     // Then, we generate the proving key and verification key from the SRS and
     // circuit.
-    let (pk, vk) = PlonkKzgSnark::<Bls12_381>::preprocess(&srs, &circuit)?;
+    let (pk, vk) =
+        PlonkKzgSnark::<Bls12_381, UnivariateKzgPCS<Bls12_381>>::preprocess(&srs, &circuit)?;
 
     // Next, we generate the proof.
     // The proof generation will need an internal transcript for Fiat-Shamir
     // transformation. For this example we use a `StandardTranscript`.
-    let proof = PlonkKzgSnark::<Bls12_381>::prove::<_, _, StandardTranscript>(
-        &mut rng, &circuit, &pk, None,
-    )?;
+    let proof =
+        PlonkKzgSnark::<Bls12_381, UnivariateKzgPCS<Bls12_381>>::prove::<_, _, StandardTranscript>(
+            &mut rng, &circuit, &pk, None,
+        )?;
 
     // Last step, verify the proof against the public inputs.
     let public_inputs = circuit.public_input().unwrap();
     // extra messages to bound to proof by appending in its transcripts, not used
     // here.
     let extra_transcript_init_msg = None;
-    assert!(PlonkKzgSnark::<Bls12_381>::verify::<StandardTranscript>(
+    assert!(PlonkKzgSnark::<Bls12_381, UnivariateKzgPCS<Bls12_381>>::verify::<StandardTranscript>(
         &vk,
         &public_inputs,
         &proof,

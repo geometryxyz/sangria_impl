@@ -236,7 +236,7 @@ mod tests {
     use ark_bls12_377::Bls12_377;
     use ark_ec::{AffineCurve, ProjectiveCurve};
     use ark_std::{format, test_rng, UniformRand};
-    use jf_primitives::pcs::prelude::{Commitment, UnivariateVerifierParam};
+    use jf_primitives::pcs::prelude::{Commitment, UnivariateKzgPCS, UnivariateVerifierParam};
     use jf_relation::gadgets::ecc::Point;
     use jf_utils::{bytes_to_field_elements, field_switching};
 
@@ -312,7 +312,7 @@ mod tests {
             beta_h: E::G2Projective::rand(&mut rng).into_affine(),
         };
 
-        let dummy_vk = VerifyingKey {
+        let dummy_vk: VerifyingKey<_, UnivariateKzgPCS<E>> = VerifyingKey {
             domain_size: 512,
             num_inputs: 0,
             sigma_comms: Vec::new(),
@@ -371,7 +371,7 @@ mod tests {
             // k
             let k: Vec<E::Fr> = (0..5).map(|_| E::Fr::rand(&mut rng)).collect();
 
-            let vk = VerifyingKey {
+            let vk: VerifyingKey<_, UnivariateKzgPCS<E>> = VerifyingKey {
                 domain_size: 512,
                 num_inputs: input.len(),
                 sigma_comms,

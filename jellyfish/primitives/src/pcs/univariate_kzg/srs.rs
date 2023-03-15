@@ -6,7 +6,7 @@
 
 //! Implementing Structured Reference Strings for univariate polynomial KZG
 
-use crate::pcs::{PCSError, StructuredReferenceString};
+use crate::pcs::{PCSError, StructuredReferenceString, WithMaxDegree};
 use ark_ec::{msm::FixedBaseMSM, AffineCurve, PairingEngine, ProjectiveCurve};
 use ark_ff::PrimeField;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, Read, SerializationError, Write};
@@ -36,6 +36,12 @@ impl<E: PairingEngine> UnivariateUniversalParams<E> {
     /// Returns the maximum supported degree
     pub fn max_degree(&self) -> usize {
         self.powers_of_g.len()
+    }
+}
+
+impl <E:PairingEngine> WithMaxDegree for UnivariateUniversalParams<E> {
+    fn max_degree(&self) -> usize {
+        self.max_degree()
     }
 }
 

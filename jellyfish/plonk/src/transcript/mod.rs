@@ -23,7 +23,7 @@ use ark_ec::{
     short_weierstrass_jacobian::GroupAffine, PairingEngine, SWModelParameters as SWParam,
 };
 use ark_ff::PrimeField;
-use jf_primitives::pcs::prelude::Commitment;
+use jf_primitives::pcs::{prelude::Commitment, PolynomialCommitmentScheme};
 use jf_utils::to_bytes;
 
 /// Defines transcript APIs.
@@ -41,9 +41,9 @@ pub trait PlonkTranscript<F> {
     fn new(label: &'static [u8]) -> Self;
 
     /// Append the verification key and the public input to the transcript.
-    fn append_vk_and_pub_input<E, P>(
+    fn append_vk_and_pub_input<E, P, S: PolynomialCommitmentScheme<E>>(
         &mut self,
-        vk: &VerifyingKey<E>,
+        vk: &VerifyingKey<E, S>,
         pub_input: &[E::Fr],
     ) -> Result<(), PlonkError>
     where

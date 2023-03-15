@@ -16,7 +16,7 @@ use ark_ec::{
 use ark_std::vec::Vec;
 use jf_primitives::{
     crhf::{VariableLengthRescueCRHF, CRHF},
-    pcs::prelude::Commitment,
+    pcs::{prelude::Commitment, PolynomialCommitmentScheme},
     rescue::{RescueParameter, STATE_SIZE},
 };
 use jf_relation::gadgets::ecc::{Point, SWToTEConParam};
@@ -55,9 +55,9 @@ where
         }
     }
 
-    fn append_vk_and_pub_input<E, P>(
+    fn append_vk_and_pub_input<E, P, S: PolynomialCommitmentScheme<E>>(
         &mut self,
-        vk: &VerifyingKey<E>,
+        vk: &VerifyingKey<E, S>,
         pub_input: &[E::Fr],
     ) -> Result<(), PlonkError>
     where

@@ -18,7 +18,10 @@ use ark_ff::{Field, One, Zero};
 use ark_poly::{EvaluationDomain, Radix2EvaluationDomain};
 use ark_std::{format, vec, vec::Vec};
 use core::ops::Neg;
-use jf_primitives::{pcs::prelude::Commitment, rescue::RescueParameter};
+use jf_primitives::{
+    pcs::{prelude::Commitment, PolynomialCommitmentScheme, UVPCS},
+    rescue::RescueParameter,
+};
 use jf_relation::{constants::GATE_WIDTH, gadgets::ecc::SWToTEConParam};
 use jf_utils::multi_pairing;
 
@@ -62,9 +65,9 @@ where
     }
 
     /// Prepare the (aggregated) polynomial commitment evaluation information.
-    pub(crate) fn prepare_pcs_info<T>(
+    pub(crate) fn prepare_pcs_info<T, S: PolynomialCommitmentScheme<E>>(
         &self,
-        verify_keys: &[&VerifyingKey<E>],
+        verify_keys: &[&VerifyingKey<E, S>],
         public_inputs: &[&[E::Fr]],
         batch_proof: &BatchProof<E>,
         extra_transcript_init_msg: &Option<Vec<u8>>,
@@ -109,7 +112,7 @@ where
         }
 
         // compute challenges and evaluations
-        let challenges = Self::compute_challenges::<T>(
+        let challenges = Self::compute_challenges::<T, _>(
             verify_keys,
             public_inputs,
             batch_proof,
@@ -193,8 +196,8 @@ where
     ///   [shifted_open_proof_i] + comm_i - eval_i * [1]1`.
     /// By Schwartz-Zippel lemma, it's equivalent to check that for a random r:
     /// - `e(A0 + ... + r^{m-1} * Am, [x]2) = e(B0 + ... + r^{m-1} * Bm, [1]2)`.
-    pub(crate) fn batch_verify_opening_proofs<T>(
-        open_key: &OpenKey<E>,
+    pub(crate) fn batch_verify_opening_proofs<T, S: UVPCS<E>>(
+        open_key: &OpenKey<E, S>,
         pcs_infos: &[PcsInfo<E>],
     ) -> Result<bool, PlonkError>
     where
@@ -254,8 +257,8 @@ where
     /// Compute verifier challenges `tau`, `beta`, `gamma`, `alpha`, `zeta`,
     /// 'v', 'u'.
     #[inline]
-    pub(crate) fn compute_challenges<T>(
-        verify_keys: &[&VerifyingKey<E>],
+    pub(crate) fn compute_challenges<T, S: PolynomialCommitmentScheme<E>>(
+        verify_keys: &[&VerifyingKey<E, S>],
         public_inputs: &[&[E::Fr]],
         batch_proof: &BatchProof<E>,
         extra_transcript_init_msg: &Option<Vec<u8>>,
@@ -346,10 +349,10 @@ where
     /// where m is the number of instances, and k_j is the number of alpha power
     /// terms added to the first j-1 instances.
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn compute_lin_poly_constant_term(
+    pub(crate) fn compute_lin_poly_constant_term<S: PolynomialCommitmentScheme<E>>(
         &self,
         challenges: &Challenges<E::Fr>,
-        verify_keys: &[&VerifyingKey<E>],
+        verify_keys: &[&VerifyingKey<E, S>],
         public_inputs: &[&[E::Fr]],
         batch_proof: &BatchProof<E>,
         vanish_eval: &E::Fr,
@@ -427,9 +430,9 @@ where
     /// The verification key type is guaranteed to match the Plonk proof type.
     /// The returned commitment is a generalization of `[F]1` described in Sec 8.4, step 10 of https://eprint.iacr.org/2019/953.pdf
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn aggregate_poly_commitments(
+    pub(crate) fn aggregate_poly_commitments<S: PolynomialCommitmentScheme<E>>(
         &self,
-        vks: &[&VerifyingKey<E>],
+        vks: &[&VerifyingKey<E, S>],
         challenges: &Challenges<E::Fr>,
         vanish_eval: &E::Fr,
         lagrange_1_eval: &E::Fr,
@@ -529,9 +532,9 @@ where
     /// which is a generalization of `[D]1` specified in Sec 8.3, Verifier
     /// algorithm step 9 of https://eprint.iacr.org/2019/953.pdf.
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn linearization_scalars_and_bases(
+    pub(crate) fn linearization_scalars_and_bases<S: PolynomialCommitmentScheme<E>>(
         &self,
-        vks: &[&VerifyingKey<E>],
+        vks: &[&VerifyingKey<E, S>],
         challenges: &Challenges<E::Fr>,
         vanish_eval: &E::Fr,
         lagrange_1_eval: &E::Fr,
@@ -825,9 +828,9 @@ where
     #[inline]
     /// Return the list of polynomial commitments to be opened at point `zeta`.
     /// The order should be consistent with the prover side.
-    fn plookup_open_poly_comms(
+    fn plookup_open_poly_comms<S: PolynomialCommitmentScheme<E>>(
         proof: &PlookupProof<E>,
-        vk: &VerifyingKey<E>,
+        vk: &VerifyingKey<E, S>,
     ) -> Result<Vec<Commitment<E>>, PlonkError> {
         Ok(vec![
             vk.plookup_vk.as_ref().unwrap().range_table_comm,
@@ -842,9 +845,9 @@ where
     #[inline]
     /// Return the list of polynomial commitments to be opened at point `zeta *
     /// g`. The order should be consistent with the prover side.
-    fn plookup_shifted_open_poly_comms(
+    fn plookup_shifted_open_poly_comms<S: PolynomialCommitmentScheme<E>>(
         proof: &PlookupProof<E>,
-        vk: &VerifyingKey<E>,
+        vk: &VerifyingKey<E, S>,
         wires_poly_comms: &[Commitment<E>],
     ) -> Result<Vec<Commitment<E>>, PlonkError> {
         Ok(vec![
