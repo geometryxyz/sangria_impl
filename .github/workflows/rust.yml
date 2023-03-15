@@ -38,6 +38,10 @@ jobs:
       matrix:
         toolchain: [stable, nightly]
         os: [ubuntu]
+        directory: ['.', 'jellyfish']
+    defaults:
+      run:
+        working-directory: ${{ matrix.directory }}
     steps:
       - uses: actions/checkout@v3
       - uses: actions-rs/toolchain@v1
@@ -50,6 +54,8 @@ jobs:
       - name: Doctests
         run: |
           cargo test --doc --all-features
+
+
 
   clippy:
     name: Clippy

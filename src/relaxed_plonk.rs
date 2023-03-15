@@ -76,48 +76,48 @@ impl<F: PrimeField, Comm: FoldingCommitmentConfig<F>> RelaxedPLONKInstance<F, Co
     }
 }
 
-impl<F, Comm> Absorb for RelaxedPLONKInstance<F, Comm> 
+impl<F, Comm> Absorb for RelaxedPLONKInstance<F, Comm>
 where
-F: PrimeField,
- Comm: FoldingCommitmentConfig<F>
+    F: PrimeField,
+    Comm: FoldingCommitmentConfig<F>,
 {
-    fn to_sponge_bytes(&self, dest: &mut Vec<u8>) {
+    fn to_sponge_bytes(&self, _dest: &mut Vec<u8>) {
         todo!()
     }
 
-    fn to_sponge_field_elements<SpongeF: PrimeField>(&self, dest: &mut Vec<SpongeF>) {
+    fn to_sponge_field_elements<SpongeF: PrimeField>(&self, _dest: &mut Vec<SpongeF>) {
         todo!()
     }
 }
 
-impl<F, Comm> Add<&Self> for RelaxedPLONKInstance<F, Comm> 
+impl<F, Comm> Add<&Self> for RelaxedPLONKInstance<F, Comm>
 where
     F: PrimeField,
-    Comm: FoldingCommitmentConfig<F>
-{
-    type Output = Self;
-
-    fn add(self, rhs: &Self) -> Self::Output {
-        todo!()
-    }
-}
-
-impl<F, Comm> Mul<F> for RelaxedPLONKInstance<F, Comm> 
-where
-    F: PrimeField,
-    Comm: FoldingCommitmentConfig<F>
+    Comm: FoldingCommitmentConfig<F>,
 {
     type Output = Self;
 
-    fn mul(self, rhs: F) -> Self::Output {
+    fn add(self, _rhs: &Self) -> Self::Output {
         todo!()
     }
 }
 
-impl<F, Comm> Clone for RelaxedPLONKInstance<F, Comm> 
+impl<F, Comm> Mul<F> for RelaxedPLONKInstance<F, Comm>
 where
     F: PrimeField,
-    Comm: FoldingCommitmentConfig<F>
+    Comm: FoldingCommitmentConfig<F>,
+{
+    type Output = Self;
+
+    fn mul(self, _rhs: F) -> Self::Output {
+        todo!()
+    }
+}
+
+impl<F, Comm> Clone for RelaxedPLONKInstance<F, Comm>
+where
+    F: PrimeField,
+    Comm: FoldingCommitmentConfig<F>,
 {
     fn clone(&self) -> Self {
         todo!()
@@ -249,11 +249,11 @@ impl<F: Field> PLONKCircuit<F> {
 }
 
 impl<CircuitField: PrimeField> Absorb for PLONKCircuit<CircuitField> {
-    fn to_sponge_bytes(&self, dest: &mut Vec<u8>) {
+    fn to_sponge_bytes(&self, _dest: &mut Vec<u8>) {
         todo!()
     }
 
-    fn to_sponge_field_elements<F: PrimeField>(&self, dest: &mut Vec<F>) {
+    fn to_sponge_field_elements<F: PrimeField>(&self, _dest: &mut Vec<F>) {
         todo!()
     }
 }
