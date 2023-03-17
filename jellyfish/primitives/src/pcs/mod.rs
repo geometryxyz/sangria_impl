@@ -12,8 +12,8 @@ mod structs;
 mod transcript;
 mod univariate_kzg;
 
-use ark_ec::PairingEngine;
-use ark_ff::Field;
+use ark_ec::{AffineCurve, PairingEngine};
+use ark_ff::{Field, PrimeField, SquareRootField};
 use ark_poly::univariate::DensePolynomial;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use ark_std::{
@@ -34,7 +34,7 @@ use self::prelude::Commitment;
 pub trait UVPCS<E: PairingEngine>:
     PolynomialCommitmentScheme<
         E,
-        Polynomial = DensePolynomial<<E as PairingEngine>::Fr>,
+        Polynomial = DensePolynomial<<E as CommitmentGroup>::Fr>,
         Commitment = Commitment<E>,
         BatchCommitment = Vec<Commitment<E>>,
         VerifierParam = UnivariateVerifierParam<E>,
@@ -46,13 +46,31 @@ impl<
         E: PairingEngine,
         S: PolynomialCommitmentScheme<
                 E,
-                Polynomial = DensePolynomial<<E as PairingEngine>::Fr>,
+                Polynomial = DensePolynomial<<E as CommitmentGroup>::Fr>,
                 Commitment = Commitment<E>,
                 BatchCommitment = Vec<Commitment<E>>,
                 VerifierParam = UnivariateVerifierParam<E>,
             > + Sync,
     > UVPCS<E> for S
 {
+}
+
+/// This trait defines the common APIs for a commitment group.
+pub trait CommitmentGroup: Sized + 'static + Copy + Debug + Sync + Send + Eq + PartialEq {
+    /// This is the scalar field of the G1/G2 groups.
+    type Fr: PrimeField + SquareRootField;
+
+    /// The element type of the group
+    type G1Affine: AffineCurve<BaseField = Self::Fq, ScalarField = Self::Fr>;
+
+    /// The base field
+    type Fq: PrimeField + SquareRootField;
+}
+
+impl<E: PairingEngine> CommitmentGroup for E {
+    type Fr = E::Fr;
+    type G1Affine = E::G1Affine;
+    type Fq = E::Fq;
 }
 
 /// This trait defines the max degree supported by an SRS
@@ -63,7 +81,7 @@ pub trait WithMaxDegree {
 /// This trait defines APIs for polynomial commitment schemes.
 /// Note that for our usage, this PCS is not hiding.
 /// TODO(#187): add hiding property.
-pub trait PolynomialCommitmentScheme<E: PairingEngine> {
+pub trait PolynomialCommitmentScheme<E: CommitmentGroup> {
     /// Prover parameters
     type ProverParam: Clone
         + Debug
