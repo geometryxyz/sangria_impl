@@ -10,9 +10,7 @@ use crate::{
     constants::EXTRA_TRANSCRIPT_MSG_LABEL,
     errors::PlonkError,
 };
-use ark_ec::{
-    short_weierstrass_jacobian::GroupAffine, PairingEngine, SWModelParameters as SWParam,
-};
+use ark_ec::{short_weierstrass_jacobian::GroupAffine, SWModelParameters as SWParam};
 use ark_ff::PrimeField;
 use ark_poly::{EvaluationDomain, Radix2EvaluationDomain};
 use ark_std::{format, vec::Vec};
@@ -51,7 +49,7 @@ pub(super) fn aggregate_poly_commitments_circuit<E, F>(
     non_native_field_info: NonNativeFieldInfo<F>,
 ) -> Result<(ScalarsAndBasesVar<F>, Vec<FpElemVar<F>>), CircuitError>
 where
-    E: PairingEngine<Fq = F>,
+    E: CommitmentGroup<Fq = F>,
     F: PrimeField,
 {
     if vks.len() != batch_proof.len() {
@@ -134,7 +132,7 @@ pub(super) fn aggregate_evaluations_circuit<E, F>(
     buffer_v_and_uv_basis: &[FpElemVar<F>],
 ) -> Result<FpElemVar<F>, CircuitError>
 where
-    E: PairingEngine<Fq = F>,
+    E: CommitmentGroup<Fq = F>,
     F: PrimeField,
 {
     let mut result = circuit.mod_negate(lin_poly_constant, &non_native_field_info.modulus_in_f)?;
@@ -193,7 +191,7 @@ pub(super) fn compute_challenges_vars<E, F, P>(
     non_native_field_info: NonNativeFieldInfo<F>,
 ) -> Result<ChallengesFpElemVar<F>, CircuitError>
 where
-    E: PairingEngine<Fq = F, G1Affine = GroupAffine<P>>,
+    E: CommitmentGroup<Fq = F, G1Affine = GroupAffine<P>>,
     F: RescueParameter + SWToTEConParam,
     P: SWParam<BaseField = F>,
 {
@@ -271,7 +269,7 @@ pub(super) fn prepare_pcs_info_var<E, F, P>(
     non_native_field_info: NonNativeFieldInfo<F>,
 ) -> Result<PcsInfoVar<F>, CircuitError>
 where
-    E: PairingEngine<Fq = F, G1Affine = GroupAffine<P>>,
+    E: CommitmentGroup<Fq = F, G1Affine = GroupAffine<P>>,
     F: RescueParameter + SWToTEConParam,
     P: SWParam<BaseField = F>,
 {
@@ -460,7 +458,7 @@ mod test {
         transcript::{PlonkTranscript, RescueTranscript},
     };
     use ark_bls12_377::{g1::Parameters as Param377, Bls12_377};
-    use ark_ec::{SWModelParameters, TEModelParameters};
+    use ark_ec::{PairingEngine, SWModelParameters, TEModelParameters};
     use ark_std::{test_rng, vec, UniformRand};
     use jf_primitives::{pcs::prelude::UnivariateKzgPCS, rescue::RescueParameter};
     use jf_relation::{Circuit, MergeableCircuitType};

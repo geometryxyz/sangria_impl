@@ -10,13 +10,11 @@ use crate::{
     errors::PlonkError,
     proof_system::structs::{PlookupEvaluations, ProofEvaluations, VerifyingKey},
 };
-use ark_ec::{
-    short_weierstrass_jacobian::GroupAffine, PairingEngine, SWModelParameters as SWParam,
-};
+use ark_ec::{short_weierstrass_jacobian::GroupAffine, SWModelParameters as SWParam};
 use ark_std::vec::Vec;
 use jf_primitives::{
     crhf::{VariableLengthRescueCRHF, CRHF},
-    pcs::{prelude::Commitment, PolynomialCommitmentScheme},
+    pcs::{prelude::Commitment, CommitmentGroup, PolynomialCommitmentScheme},
     rescue::{RescueParameter, STATE_SIZE},
 };
 use jf_relation::gadgets::ecc::{Point, SWToTEConParam};
@@ -61,7 +59,7 @@ where
         pub_input: &[E::Fr],
     ) -> Result<(), PlonkError>
     where
-        E: PairingEngine<Fq = F, G1Affine = GroupAffine<P>>,
+        E: CommitmentGroup<Fq = F, G1Affine = GroupAffine<P>>,
         P: SWParam<BaseField = F>,
     {
         // to enable a more efficient verifier circuit, we remove
@@ -111,7 +109,7 @@ where
         comm: &Commitment<E>,
     ) -> Result<(), PlonkError>
     where
-        E: PairingEngine<Fq = F, G1Affine = GroupAffine<P>>,
+        E: CommitmentGroup<Fq = F, G1Affine = GroupAffine<P>>,
         P: SWParam<BaseField = F>,
     {
         // convert the SW form commitments into TE form
@@ -132,13 +130,13 @@ where
         challenge: &E::Fr,
     ) -> Result<(), PlonkError>
     where
-        E: PairingEngine<Fq = F>,
+        E: CommitmentGroup<Fq = F>,
     {
         self.transcript.push(field_switching(challenge));
         Ok(())
     }
 
-    fn append_proof_evaluations<E: PairingEngine>(
+    fn append_proof_evaluations<E: CommitmentGroup>(
         &mut self,
         evals: &ProofEvaluations<E::Fr>,
     ) -> Result<(), PlonkError> {
@@ -152,7 +150,7 @@ where
         Ok(())
     }
 
-    fn append_plookup_evaluations<E: PairingEngine>(
+    fn append_plookup_evaluations<E: CommitmentGroup>(
         &mut self,
         evals: &PlookupEvaluations<E::Fr>,
     ) -> Result<(), PlonkError> {
@@ -170,7 +168,7 @@ where
     /// efficiency.
     fn get_and_append_challenge<E>(&mut self, _label: &'static [u8]) -> Result<E::Fr, PlonkError>
     where
-        E: PairingEngine<Fq = F>,
+        E: CommitmentGroup<Fq = F>,
     {
         // 1. state: [F: STATE_SIZE] = hash(state|transcript)
         // 2. challenge = state[0] in Fr

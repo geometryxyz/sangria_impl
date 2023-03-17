@@ -32,7 +32,7 @@ use ark_std::{
 };
 use jf_primitives::{
     pcs::PolynomialCommitmentScheme,
-    pcs::{WithMaxDegree, UVPCS},
+    pcs::{prelude::UnivariateVerifierParam, CommitmentGroup, WithMaxDegree, UVPCS},
     rescue::RescueParameter,
 };
 use jf_relation::{
@@ -43,11 +43,11 @@ use jf_utils::par_utils::parallelizable_slice_iter;
 use rayon::prelude::*;
 
 /// A Plonk instantiated with a KZG PCS variant
-pub struct PlonkKzgSnark<E: PairingEngine, S: PolynomialCommitmentScheme<E>>(PhantomData<(E, S)>);
+pub struct PlonkKzgSnark<E: CommitmentGroup, S: PolynomialCommitmentScheme<E>>(PhantomData<(E, S)>);
 
 impl<E, F, P, S> PlonkKzgSnark<E, S>
 where
-    E: PairingEngine<Fq = F, G1Affine = GroupAffine<P>>,
+    E: CommitmentGroup<Fq = F, G1Affine = GroupAffine<P>>,
     F: RescueParameter + SWToTEConParam,
     P: SWModelParameters<BaseField = F>,
     S: UVPCS<E>,
@@ -57,7 +57,6 @@ where
     pub fn new() -> Self {
         Self(PhantomData)
     }
-
     /// Generate an aggregated Plonk proof for multiple instances.
     pub fn batch_prove<C, R, T>(
         prng: &mut R,
@@ -73,84 +72,6 @@ where
         let (batch_proof, ..) =
             Self::batch_prove_internal::<_, _, T>(prng, circuits, prove_keys, None)?;
         Ok(batch_proof)
-    }
-
-    /// Verify a single aggregated Plonk proof.
-    pub fn verify_batch_proof<T>(
-        verify_keys: &[&VerifyingKey<E, S>],
-        public_inputs: &[&[E::Fr]],
-        batch_proof: &BatchProof<E>,
-    ) -> Result<(), PlonkError>
-    where
-        T: PlonkTranscript<F>,
-    {
-        if verify_keys.is_empty() {
-            return Err(ParameterError("empty verification keys".to_string()).into());
-        }
-        let verifier = Verifier::new(verify_keys[0].domain_size)?;
-        let pcs_info =
-            verifier.prepare_pcs_info::<T, S>(verify_keys, public_inputs, batch_proof, &None)?;
-        if !Verifier::batch_verify_opening_proofs::<T, S>(
-            &verify_keys[0].open_key, // all open_key are the same
-            &[pcs_info],
-        )? {
-            return Err(PlonkError::WrongProof);
-        }
-        Ok(())
-    }
-
-    /// Batch verify multiple SNARK proofs (w.r.t. different verifying keys).
-    pub fn batch_verify<T>(
-        verify_keys: &[&VerifyingKey<E, S>],
-        public_inputs: &[&[E::Fr]],
-        proofs: &[&Proof<E>],
-        extra_transcript_init_msgs: &[Option<Vec<u8>>],
-    ) -> Result<(), PlonkError>
-    where
-        T: PlonkTranscript<F>,
-    {
-        if public_inputs.len() != proofs.len()
-            || verify_keys.len() != proofs.len()
-            || extra_transcript_init_msgs.len() != proofs.len()
-        {
-            return Err(ParameterError(format!(
-                "verify_keys.len: {}, public_inputs.len: {}, proofs.len: {}, \
-                 extra_transcript_msg.len: {}",
-                verify_keys.len(),
-                public_inputs.len(),
-                proofs.len(),
-                extra_transcript_init_msgs.len()
-            ))
-            .into());
-        }
-        if verify_keys.is_empty() {
-            return Err(
-                ParameterError("the number of instances cannot be zero".to_string()).into(),
-            );
-        }
-
-        let pcs_infos = parallelizable_slice_iter(verify_keys)
-            .zip(parallelizable_slice_iter(proofs))
-            .zip(parallelizable_slice_iter(public_inputs))
-            .zip(parallelizable_slice_iter(extra_transcript_init_msgs))
-            .map(|(((&vk, &proof), &pub_input), extra_msg)| {
-                let verifier = Verifier::new(vk.domain_size)?;
-                verifier.prepare_pcs_info::<T, S>(
-                    &[vk],
-                    &[pub_input],
-                    &(*proof).clone().into(),
-                    extra_msg,
-                )
-            })
-            .collect::<Result<Vec<_>, PlonkError>>()?;
-
-        if !Verifier::batch_verify_opening_proofs::<T, S>(
-            &verify_keys[0].open_key, // all open_key are the same
-            &pcs_infos,
-        )? {
-            return Err(PlonkError::WrongProof);
-        }
-        Ok(())
     }
 
     /// An internal private API for ease of testing
@@ -419,6 +340,91 @@ where
         ))
     }
 }
+impl<E, F, P, S> PlonkKzgSnark<E, S>
+where
+    E: PairingEngine<Fq = F, G1Affine = GroupAffine<P>>,
+    F: RescueParameter + SWToTEConParam,
+    P: SWModelParameters<BaseField = F>,
+    S: UVPCS<E, VerifierParam = UnivariateVerifierParam<E>>,
+{
+    /// Verify a single aggregated Plonk proof.
+    pub fn verify_batch_proof<T>(
+        verify_keys: &[&VerifyingKey<E, S>],
+        public_inputs: &[&[E::Fr]],
+        batch_proof: &BatchProof<E>,
+    ) -> Result<(), PlonkError>
+    where
+        T: PlonkTranscript<F>,
+    {
+        if verify_keys.is_empty() {
+            return Err(ParameterError("empty verification keys".to_string()).into());
+        }
+        let verifier = Verifier::new(verify_keys[0].domain_size)?;
+        let pcs_info =
+            verifier.prepare_pcs_info::<T, S>(verify_keys, public_inputs, batch_proof, &None)?;
+        if !Verifier::batch_verify_opening_proofs::<T, S>(
+            &verify_keys[0].open_key, // all open_key are the same
+            &[pcs_info],
+        )? {
+            return Err(PlonkError::WrongProof);
+        }
+        Ok(())
+    }
+
+    /// Batch verify multiple SNARK proofs (w.r.t. different verifying keys).
+    pub fn batch_verify<T>(
+        verify_keys: &[&VerifyingKey<E, S>],
+        public_inputs: &[&[E::Fr]],
+        proofs: &[&Proof<E>],
+        extra_transcript_init_msgs: &[Option<Vec<u8>>],
+    ) -> Result<(), PlonkError>
+    where
+        T: PlonkTranscript<F>,
+    {
+        if public_inputs.len() != proofs.len()
+            || verify_keys.len() != proofs.len()
+            || extra_transcript_init_msgs.len() != proofs.len()
+        {
+            return Err(ParameterError(format!(
+                "verify_keys.len: {}, public_inputs.len: {}, proofs.len: {}, \
+                 extra_transcript_msg.len: {}",
+                verify_keys.len(),
+                public_inputs.len(),
+                proofs.len(),
+                extra_transcript_init_msgs.len()
+            ))
+            .into());
+        }
+        if verify_keys.is_empty() {
+            return Err(
+                ParameterError("the number of instances cannot be zero".to_string()).into(),
+            );
+        }
+
+        let pcs_infos = parallelizable_slice_iter(verify_keys)
+            .zip(parallelizable_slice_iter(proofs))
+            .zip(parallelizable_slice_iter(public_inputs))
+            .zip(parallelizable_slice_iter(extra_transcript_init_msgs))
+            .map(|(((&vk, &proof), &pub_input), extra_msg)| {
+                let verifier = Verifier::new(vk.domain_size)?;
+                verifier.prepare_pcs_info::<T, S>(
+                    &[vk],
+                    &[pub_input],
+                    &(*proof).clone().into(),
+                    extra_msg,
+                )
+            })
+            .collect::<Result<Vec<_>, PlonkError>>()?;
+
+        if !Verifier::batch_verify_opening_proofs::<T, S>(
+            &verify_keys[0].open_key, // all open_key are the same
+            &pcs_infos,
+        )? {
+            return Err(PlonkError::WrongProof);
+        }
+        Ok(())
+    }
+}
 
 impl<E, F, P, S> UniversalSNARK<E> for PlonkKzgSnark<E, S>
 where
@@ -426,7 +432,7 @@ where
 
     F: RescueParameter + SWToTEConParam,
     P: SWModelParameters<BaseField = F>,
-    S: UVPCS<E>,
+    S: UVPCS<E, VerifierParam = UnivariateVerifierParam<E>>,
 {
     type Proof = Proof<E>;
     type ProvingKey = ProvingKey<E, S>;
@@ -623,7 +629,7 @@ pub mod test {
     use core::ops::{Mul, Neg};
     use jf_primitives::{
         pcs::{
-            prelude::{Commitment, UnivariateKzgPCS},
+            prelude::{Commitment, UnivariateKzgPCS, UnivariateVerifierParam},
             PolynomialCommitmentScheme, UVPCS,
         },
         rescue::RescueParameter,
@@ -1667,7 +1673,7 @@ pub mod test {
         F: RescueParameter + SWToTEConParam,
         P: SWModelParameters<BaseField = F>,
         R: CryptoRng + RngCore,
-        S: UVPCS<E>,
+        S: UVPCS<E, VerifierParam = UnivariateVerifierParam<E>>,
         T: PlonkTranscript<F>,
     {
         // Batch Proving

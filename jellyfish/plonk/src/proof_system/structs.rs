@@ -28,7 +28,10 @@ use ark_std::{
 use espresso_systems_common::jellyfish::tag;
 use hashbrown::HashMap;
 use jf_primitives::{
-    pcs::{prelude::Commitment, PolynomialCommitmentScheme, UVPCS},
+    pcs::{
+        prelude::{Commitment, UnivariateVerifierParam},
+        CommitmentGroup, PolynomialCommitmentScheme, UVPCS,
+    },
     rescue::RescueParameter,
 };
 use jf_relation::{
@@ -52,8 +55,8 @@ pub type OpenKey<E, S> = <S as PolynomialCommitmentScheme<E>>::VerifierParam;
 /// A Plonk SNARK proof.
 #[tagged(tag::PROOF)]
 #[derive(Debug, Clone, PartialEq, Eq, CanonicalSerialize, CanonicalDeserialize, Derivative)]
-#[derivative(Hash(bound = "E:PairingEngine"))]
-pub struct Proof<E: PairingEngine> {
+#[derivative(Hash(bound = "E:CommitmentGroup"))]
+pub struct Proof<E: CommitmentGroup> {
     /// Wire witness polynomials commitments.
     pub(crate) wires_poly_comms: Vec<Commitment<E>>,
 
@@ -79,7 +82,7 @@ pub struct Proof<E: PairingEngine> {
 
 impl<E, P> TryFrom<Vec<E::Fq>> for Proof<E>
 where
-    E: PairingEngine<G1Affine = GroupAffine<P>>,
+    E: CommitmentGroup<G1Affine = GroupAffine<P>>,
     P: SWModelParameters<BaseField = E::Fq, ScalarField = E::Fr>,
 {
     type Error = SnarkError;
@@ -155,7 +158,7 @@ where
 // helper function to convert a G1Affine or G2Affine into two base fields
 fn group1_to_fields<E, P>(p: GroupAffine<P>) -> Vec<E::Fq>
 where
-    E: PairingEngine<G1Affine = GroupAffine<P>>,
+    E: CommitmentGroup<G1Affine = GroupAffine<P>>,
     P: SWModelParameters<BaseField = E::Fq>,
 {
     // contains x, y, infinity_flag, only need the first 2 field elements
@@ -174,7 +177,7 @@ where
 
 impl<E, P> From<Proof<E>> for Vec<E::Fq>
 where
-    E: PairingEngine<G1Affine = GroupAffine<P>>,
+    E: CommitmentGroup<G1Affine = GroupAffine<P>>,
     P: SWModelParameters<BaseField = E::Fq, ScalarField = E::Fr>,
 {
     fn from(proof: Proof<E>) -> Self {
@@ -211,8 +214,8 @@ where
 
 /// A Plookup argument proof.
 #[derive(Debug, Clone, PartialEq, Eq, CanonicalSerialize, CanonicalDeserialize, Derivative)]
-#[derivative(Hash(bound = "E:PairingEngine"))]
-pub struct PlookupProof<E: PairingEngine> {
+#[derivative(Hash(bound = "E:CommitmentGroup"))]
+pub struct PlookupProof<E: CommitmentGroup> {
     /// The commitments for the polynomials that interpolate the sorted
     /// concatenation of the lookup table and the witnesses in the lookup gates.
     pub(crate) h_poly_comms: Vec<Commitment<E>>,
@@ -227,8 +230,8 @@ pub struct PlookupProof<E: PairingEngine> {
 /// An aggregated SNARK proof that batchly proving multiple instances.
 #[tagged(tag::BATCHPROOF)]
 #[derive(Debug, Clone, PartialEq, Eq, CanonicalSerialize, CanonicalDeserialize, Derivative)]
-#[derivative(Hash(bound = "E:PairingEngine"))]
-pub struct BatchProof<E: PairingEngine> {
+#[derivative(Hash(bound = "E:CommitmentGroup"))]
+pub struct BatchProof<E: CommitmentGroup> {
     /// The list of wire witness polynomials commitments.
     pub(crate) wires_poly_comms_vec: Vec<Vec<Commitment<E>>>,
 
@@ -252,7 +255,7 @@ pub struct BatchProof<E: PairingEngine> {
     pub(crate) shifted_opening_proof: Commitment<E>,
 }
 
-impl<E: PairingEngine> BatchProof<E> {
+impl<E: CommitmentGroup> BatchProof<E> {
     /// The number of instances being proved in a batch proof.
     pub fn len(&self) -> usize {
         self.prod_perm_poly_comms_vec.len()
@@ -276,7 +279,7 @@ impl<E: PairingEngine> BatchProof<E> {
     }
 }
 
-impl<E: PairingEngine> From<Proof<E>> for BatchProof<E> {
+impl<E: CommitmentGroup> From<Proof<E>> for BatchProof<E> {
     fn from(proof: Proof<E>) -> Self {
         Self {
             wires_poly_comms_vec: vec![proof.wires_poly_comms],
@@ -338,7 +341,7 @@ impl<T: PrimeField> ProofEvaluations<T> {
     }
 }
 
-impl<E: PairingEngine> BatchProof<E> {
+impl<E: CommitmentGroup> BatchProof<E> {
     /// Create a `BatchProofVar` variable from a `BatchProof`.
     pub fn create_variables<F, P>(
         &self,
@@ -347,7 +350,7 @@ impl<E: PairingEngine> BatchProof<E> {
         two_power_m: Option<F>,
     ) -> Result<BatchProofVar<F>, PlonkError>
     where
-        E: PairingEngine<Fq = F, G1Affine = GroupAffine<P>>,
+        E: CommitmentGroup<Fq = F, G1Affine = GroupAffine<P>>,
         F: RescueParameter + SWToTEConParam,
         P: SWModelParameters<BaseField = F>,
     {
@@ -543,7 +546,7 @@ impl<F: Field> PlookupEvaluations<F> {
 /// Preprocessed prover parameters used to compute Plonk proofs for a certain
 /// circuit.
 #[derive(Debug, PartialEq, Eq, CanonicalSerialize, CanonicalDeserialize)]
-pub struct ProvingKey<E: PairingEngine, S: PolynomialCommitmentScheme<E>> {
+pub struct ProvingKey<E: CommitmentGroup, S: PolynomialCommitmentScheme<E>> {
     /// Extended permutation (sigma) polynomials.
     pub(crate) sigmas: Vec<DensePolynomial<E::Fr>>,
 
@@ -561,7 +564,7 @@ pub struct ProvingKey<E: PairingEngine, S: PolynomialCommitmentScheme<E>> {
 }
 
 // TODO(fga): figure out why this can't be derived.
-impl<E: PairingEngine, S: PolynomialCommitmentScheme<E>> Clone for ProvingKey<E, S> {
+impl<E: CommitmentGroup, S: PolynomialCommitmentScheme<E>> Clone for ProvingKey<E, S> {
     fn clone(&self) -> Self {
         Self {
             sigmas: self.sigmas.clone(),
@@ -576,7 +579,7 @@ impl<E: PairingEngine, S: PolynomialCommitmentScheme<E>> Clone for ProvingKey<E,
 /// Preprocessed prover parameters used to compute Plookup proofs for a certain
 /// circuit.
 #[derive(Debug, Clone, Eq, PartialEq, CanonicalSerialize, CanonicalDeserialize)]
-pub struct PlookupProvingKey<E: PairingEngine> {
+pub struct PlookupProvingKey<E: CommitmentGroup> {
     /// Range table polynomial.
     pub(crate) range_table_poly: DensePolynomial<E::Fr>,
 
@@ -590,7 +593,7 @@ pub struct PlookupProvingKey<E: PairingEngine> {
     pub(crate) q_dom_sep_poly: DensePolynomial<E::Fr>,
 }
 
-impl<E: PairingEngine, S: PolynomialCommitmentScheme<E>> ProvingKey<E, S> {
+impl<E: CommitmentGroup, S: PolynomialCommitmentScheme<E>> ProvingKey<E, S> {
     /// The size of the evaluation domain. Should be a power of two.
     pub(crate) fn domain_size(&self) -> usize {
         self.vk.domain_size
@@ -663,7 +666,7 @@ impl<E: PairingEngine, S: PolynomialCommitmentScheme<E>> ProvingKey<E, S> {
 /// Preprocessed verifier parameters used to verify Plonk proofs for a certain
 /// circuit.
 #[derive(Debug, Eq, PartialEq, CanonicalSerialize, CanonicalDeserialize)]
-pub struct VerifyingKey<E: PairingEngine, S: PolynomialCommitmentScheme<E>> {
+pub struct VerifyingKey<E: CommitmentGroup, S: PolynomialCommitmentScheme<E>> {
     /// The size of the evaluation domain. Should be a power of two.
     pub(crate) domain_size: usize,
 
@@ -691,7 +694,7 @@ pub struct VerifyingKey<E: PairingEngine, S: PolynomialCommitmentScheme<E>> {
 }
 
 // TODO(fga): figure why this isn't trivially derived
-impl<E: PairingEngine, S: PolynomialCommitmentScheme<E>> Clone for VerifyingKey<E, S> {
+impl<E: CommitmentGroup, S: PolynomialCommitmentScheme<E>> Clone for VerifyingKey<E, S> {
     fn clone(&self) -> Self {
         Self {
             domain_size: self.domain_size,
@@ -712,7 +715,7 @@ where
     F: Fp2Parameters<Fp = E::Fq>,
     P1: SWModelParameters<BaseField = E::Fq, ScalarField = E::Fr>,
     P2: SWModelParameters<BaseField = E::Fqe, ScalarField = E::Fr>,
-    S: UVPCS<E>,
+    S: UVPCS<E, VerifierParam = UnivariateVerifierParam<E>>,
 {
     fn from(vk: VerifyingKey<E, S>) -> Self {
         if vk.plookup_vk.is_some() {
@@ -744,7 +747,7 @@ where
 
 impl<E, F, S, P> VerifyingKey<E, S>
 where
-    E: PairingEngine<Fq = F, G1Affine = GroupAffine<P>>,
+    E: CommitmentGroup<Fq = F, G1Affine = GroupAffine<P>>,
     F: SWToTEConParam,
     P: SWModelParameters<BaseField = F>,
     S: PolynomialCommitmentScheme<E>,
@@ -770,7 +773,7 @@ where
 /// Preprocessed verifier parameters used to verify Plookup proofs for a certain
 /// circuit.
 #[derive(Debug, Clone, Eq, PartialEq, CanonicalSerialize, CanonicalDeserialize)]
-pub struct PlookupVerifyingKey<E: PairingEngine> {
+pub struct PlookupVerifyingKey<E: CommitmentGroup> {
     /// Range table polynomial commitment. The commitment is not hiding.
     pub(crate) range_table_comm: Commitment<E>,
 
@@ -786,7 +789,7 @@ pub struct PlookupVerifyingKey<E: PairingEngine> {
     pub(crate) q_dom_sep_comm: Commitment<E>,
 }
 
-impl<E: PairingEngine, S: PolynomialCommitmentScheme<E>> VerifyingKey<E, S> {
+impl<E: CommitmentGroup, S: PolynomialCommitmentScheme<E>> VerifyingKey<E, S> {
     /// Create a dummy TurboPlonk verification key for a circuit with
     /// `num_inputs` public inputs and domain size `domain_size`.
     pub fn dummy(num_inputs: usize, domain_size: usize) -> Self
@@ -895,11 +898,11 @@ pub(crate) struct PlookupOracles<F: FftField> {
 
 /// The vector representation of bases and corresponding scalars.
 #[derive(Debug)]
-pub(crate) struct ScalarsAndBases<E: PairingEngine> {
+pub(crate) struct ScalarsAndBases<E: CommitmentGroup> {
     pub(crate) base_scalar_map: HashMap<E::G1Affine, E::Fr>,
 }
 
-impl<E: PairingEngine> ScalarsAndBases<E> {
+impl<E: CommitmentGroup> ScalarsAndBases<E> {
     pub(crate) fn new() -> Self {
         Self {
             base_scalar_map: HashMap::new(),
@@ -932,7 +935,7 @@ impl<E: PairingEngine> ScalarsAndBases<E> {
 
 // Utility function for computing merged table evaluations.
 #[inline]
-pub(crate) fn eval_merged_table<E: PairingEngine>(
+pub(crate) fn eval_merged_table<E: CommitmentGroup>(
     tau: E::Fr,
     range_eval: E::Fr,
     key_eval: E::Fr,
@@ -949,7 +952,7 @@ pub(crate) fn eval_merged_table<E: PairingEngine>(
 
 // Utility function for computing merged lookup witness evaluations.
 #[inline]
-pub(crate) fn eval_merged_lookup_witness<E: PairingEngine>(
+pub(crate) fn eval_merged_lookup_witness<E: CommitmentGroup>(
     tau: E::Fr,
     w_range_eval: E::Fr,
     w_0_eval: E::Fr,

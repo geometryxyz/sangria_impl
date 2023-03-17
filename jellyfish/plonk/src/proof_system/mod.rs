@@ -5,13 +5,13 @@
 // along with the Jellyfish library. If not, see <https://mit-license.org/>.
 
 //! Interfaces for Plonk-based proof systems
-use ark_ec::PairingEngine;
 use ark_std::{
     error::Error,
     fmt::Debug,
     rand::{CryptoRng, RngCore},
     vec::Vec,
 };
+use jf_primitives::pcs::CommitmentGroup;
 use jf_relation::Arithmetization;
 pub mod batch_arg;
 pub(crate) mod prover;
@@ -24,7 +24,7 @@ pub use snark::PlonkKzgSnark;
 // TODO: (alex) should we name it `PlonkishSNARK` instead? since we use
 // `PlonkTranscript` on prove and verify.
 /// An interface for SNARKs with universal setup.
-pub trait UniversalSNARK<E: PairingEngine> {
+pub trait UniversalSNARK<E: CommitmentGroup> {
     /// The SNARK proof computed by the prover.
     type Proof: Clone;
 

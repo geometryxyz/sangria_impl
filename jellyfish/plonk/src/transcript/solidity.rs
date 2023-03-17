@@ -7,9 +7,9 @@
 //! This module implements solidity transcript.
 use super::PlonkTranscript;
 use crate::{constants::KECCAK256_STATE_SIZE, errors::PlonkError};
-use ark_ec::PairingEngine;
 use ark_ff::PrimeField;
 use ark_std::vec::Vec;
+use jf_primitives::pcs::CommitmentGroup;
 use sha3::{Digest, Keccak256};
 
 /// Transcript with `keccak256` hash function.
@@ -55,7 +55,7 @@ impl<F> PlonkTranscript<F> for SolidityTranscript {
     /// efficiency.
     fn get_and_append_challenge<E>(&mut self, _label: &'static [u8]) -> Result<E::Fr, PlonkError>
     where
-        E: PairingEngine,
+        E: CommitmentGroup,
     {
         // 1. state = keccak256(state|transcript|0) || keccak256(state|transcript|1)
         let input0 = [self.state.as_ref(), self.transcript.as_ref(), &[0u8]].concat();

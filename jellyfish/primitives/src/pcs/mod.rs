@@ -12,7 +12,9 @@ mod structs;
 mod transcript;
 mod univariate_kzg;
 
-use ark_ec::{AffineCurve, PairingEngine};
+use core::ops::MulAssign;
+
+use ark_ec::{AffineCurve, PairingEngine, ProjectiveCurve};
 use ark_ff::{Field, PrimeField, SquareRootField};
 use ark_poly::univariate::DensePolynomial;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
@@ -24,32 +26,29 @@ use ark_std::{
     vec::Vec,
 };
 use errors::PCSError;
-use prelude::UnivariateVerifierParam;
 
 use self::prelude::Commitment;
 
 /// A more restricted variant of the `PolynomialCommitmentScheme` trait
 // TODO(fga): this should be resolved by https://github.com/rust-lang/rust/issues/41517
 // type UVPCS<E> = PolynomialCommitmentScheme<E, Polynomial = DensePolynomial<E::Fr>, Commitment = Commitment<E>>;
-pub trait UVPCS<E: PairingEngine>:
+pub trait UVPCS<E: CommitmentGroup>:
     PolynomialCommitmentScheme<
         E,
         Polynomial = DensePolynomial<<E as CommitmentGroup>::Fr>,
         Commitment = Commitment<E>,
         BatchCommitment = Vec<Commitment<E>>,
-        VerifierParam = UnivariateVerifierParam<E>,
     > + Sync
 {
 }
 
 impl<
-        E: PairingEngine,
+        E: CommitmentGroup,
         S: PolynomialCommitmentScheme<
                 E,
                 Polynomial = DensePolynomial<<E as CommitmentGroup>::Fr>,
                 Commitment = Commitment<E>,
                 BatchCommitment = Vec<Commitment<E>>,
-                VerifierParam = UnivariateVerifierParam<E>,
             > + Sync,
     > UVPCS<E> for S
 {
@@ -57,11 +56,19 @@ impl<
 
 /// This trait defines the common APIs for a commitment group.
 pub trait CommitmentGroup: Sized + 'static + Copy + Debug + Sync + Send + Eq + PartialEq {
-    /// This is the scalar field of the G1/G2 groups.
+    /// This is the scalar field of the group.
     type Fr: PrimeField + SquareRootField;
 
-    /// The element type of the group
-    type G1Affine: AffineCurve<BaseField = Self::Fq, ScalarField = Self::Fr>;
+    /// The projective representation of an element in G1.
+    type G1Projective: ProjectiveCurve<BaseField = Self::Fq, ScalarField = Self::Fr, Affine = Self::G1Affine>
+        + From<Self::G1Affine>
+        + Into<Self::G1Affine>
+        + MulAssign<Self::Fr>; // needed due to https://github.com/rust-lang/rust/issues/69640
+
+    /// The affine representation of an element in G1.
+    type G1Affine: AffineCurve<BaseField = Self::Fq, ScalarField = Self::Fr, Projective = Self::G1Projective>
+        + From<Self::G1Projective>
+        + Into<Self::G1Projective>;
 
     /// The base field
     type Fq: PrimeField + SquareRootField;
@@ -70,6 +77,7 @@ pub trait CommitmentGroup: Sized + 'static + Copy + Debug + Sync + Send + Eq + P
 impl<E: PairingEngine> CommitmentGroup for E {
     type Fr = E::Fr;
     type G1Affine = E::G1Affine;
+    type G1Projective = E::G1Projective;
     type Fq = E::Fq;
 }
 

@@ -7,7 +7,7 @@
 //! Main module for univariate KZG commitment scheme
 
 use crate::pcs::{
-    prelude::Commitment, PCSError, PolynomialCommitmentScheme, StructuredReferenceString,
+    prelude::Commitment, PCSError, PolynomialCommitmentScheme, StructuredReferenceString, CommitmentGroup,
 };
 use ark_ec::{msm::VariableBaseMSM, AffineCurve, PairingEngine, ProjectiveCurve};
 use ark_ff::PrimeField;
@@ -29,18 +29,19 @@ use jf_utils::par_utils::parallelizable_slice_iter;
 use rayon::prelude::*;
 use srs::{UnivariateProverParam, UnivariateUniversalParams, UnivariateVerifierParam};
 
+
 pub(crate) mod srs;
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 /// KZG Polynomial Commitment Scheme on univariate polynomial.
-pub struct UnivariateKzgPCS<E: PairingEngine> {
+pub struct UnivariateKzgPCS<E> {
     #[doc(hidden)]
     phantom: PhantomData<E>,
 }
 
 #[derive(CanonicalSerialize, CanonicalDeserialize, Clone, Debug, PartialEq, Eq)]
 /// proof of opening
-pub struct UnivariateKzgProof<E: PairingEngine> {
+pub struct UnivariateKzgProof<E: CommitmentGroup> {
     /// Evaluation of quotients
     pub proof: E::G1Affine,
 }

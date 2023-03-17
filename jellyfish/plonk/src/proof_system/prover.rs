@@ -15,7 +15,6 @@ use crate::{
     errors::{PlonkError, SnarkError::*},
     proof_system::structs::CommitKey,
 };
-use ark_ec::PairingEngine;
 use ark_ff::{FftField, Field, One, UniformRand, Zero};
 use ark_poly::{
     univariate::DensePolynomial, EvaluationDomain, GeneralEvaluationDomain, Polynomial,
@@ -27,7 +26,7 @@ use ark_std::{
     vec,
     vec::Vec,
 };
-use jf_primitives::pcs::{prelude::Commitment, UVPCS};
+use jf_primitives::pcs::{prelude::Commitment, CommitmentGroup, UVPCS};
 use jf_relation::{constants::GATE_WIDTH, Arithmetization};
 use jf_utils::par_utils::parallelizable_slice_iter;
 #[cfg(feature = "parallel")]
@@ -35,17 +34,17 @@ use rayon::prelude::*;
 
 type CommitmentsAndPolys<E> = (
     Vec<Commitment<E>>,
-    Vec<DensePolynomial<<E as PairingEngine>::Fr>>,
+    Vec<DensePolynomial<<E as CommitmentGroup>::Fr>>,
 );
 
 /// A Plonk IOP prover.
-pub(crate) struct Prover<E: PairingEngine, S> {
+pub(crate) struct Prover<E: CommitmentGroup, S> {
     domain: Radix2EvaluationDomain<E::Fr>,
     quot_domain: GeneralEvaluationDomain<E::Fr>,
     _phantom: PhantomData<S>,
 }
 
-impl<E: PairingEngine, S: UVPCS<E>> Prover<E, S> {
+impl<E: CommitmentGroup, S: UVPCS<E>> Prover<E, S> {
     /// Construct a Plonk prover that uses a domain with size `domain_size` and
     /// quotient polynomial domain with a size that is larger than the degree of
     /// the quotient polynomial.
@@ -399,8 +398,7 @@ impl<E: PairingEngine, S: UVPCS<E>> Prover<E, S> {
 }
 
 /// Private helper methods
-impl<E: PairingEngine, S: UVPCS<E>> Prover<E, S>
-{
+impl<E: CommitmentGroup, S: UVPCS<E>> Prover<E, S> {
     /// Return the list of plookup polynomials to be opened at point `zeta`
     /// The order should be consistent with the verifier side.
     #[inline]
@@ -1097,6 +1095,7 @@ mod test {
     use ark_bls12_381::Bls12_381;
     use ark_bn254::Bn254;
     use ark_bw6_761::BW6_761;
+    use ark_ec::PairingEngine;
     use ark_std::test_rng;
     use jf_primitives::pcs::prelude::UnivariateKzgPCS;
 

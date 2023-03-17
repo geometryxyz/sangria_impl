@@ -6,7 +6,6 @@
 
 //! Circuits for the polynomial evaluations within Plonk verifiers.
 use crate::{circuit::plonk_verifier::*, errors::PlonkError};
-use ark_ec::PairingEngine;
 use ark_ff::PrimeField;
 use ark_poly::{EvaluationDomain, Radix2EvaluationDomain};
 use ark_std::{format, string::ToString, vec, vec::Vec, One};
@@ -41,7 +40,7 @@ pub(super) fn evaluate_poly_helper<E, F>(
     non_native_field_info: NonNativeFieldInfo<F>,
 ) -> Result<[FpElemVar<F>; 3], CircuitError>
 where
-    E: PairingEngine<Fq = F>,
+    E: CommitmentGroup<Fq = F>,
     F: PrimeField,
 {
     // constants
@@ -188,7 +187,7 @@ pub(super) fn evaluate_pi_poly_circuit<E, F>(
     non_native_field_info: NonNativeFieldInfo<F>,
 ) -> Result<FpElemVar<F>, CircuitError>
 where
-    E: PairingEngine<Fq = F>,
+    E: CommitmentGroup<Fq = F>,
     F: PrimeField,
 {
     // the circuit is already merged
@@ -317,7 +316,7 @@ pub(super) fn compute_lin_poly_constant_term_circuit<E, F>(
     non_native_field_info: NonNativeFieldInfo<F>,
 ) -> Result<FpElemVar<F>, CircuitError>
 where
-    E: PairingEngine<Fq = F>,
+    E: CommitmentGroup<Fq = F>,
     F: PrimeField,
 {
     if verify_keys.len() != batch_proof.len() || verify_keys.len() != public_inputs.len() {
@@ -489,7 +488,7 @@ pub(super) fn linearization_scalars_and_bases_circuit<E, F>(
     non_native_field_info: NonNativeFieldInfo<F>,
 ) -> Result<ScalarsAndBasesVar<F>, CircuitError>
 where
-    E: PairingEngine<Fq = F>,
+    E: CommitmentGroup<Fq = F>,
     F: PrimeField,
 {
     let beta_times_zeta_fp_elem_var = circuit.mod_mul(
@@ -745,7 +744,7 @@ mod test {
         test_evaluate_poly_helper::<Bls12_377>();
     }
 
-    fn test_evaluate_poly_helper<E: PairingEngine>() {
+    fn test_evaluate_poly_helper<E: CommitmentGroup>() {
         let mut rng = test_rng();
 
         let mut circuit = PlonkCircuit::<E::Fq>::new_ultra_plonk(RANGE_BIT_LEN_FOR_TEST);
