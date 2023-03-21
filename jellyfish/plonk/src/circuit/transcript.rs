@@ -7,12 +7,13 @@
 //! Implementing *native* circuit for rescue transcript
 
 use super::plonk_verifier::*;
-use ark_ec::{short_weierstrass_jacobian::GroupAffine, PairingEngine, SWModelParameters};
+use ark_ec::{short_weierstrass_jacobian::GroupAffine, SWModelParameters};
 use ark_ff::PrimeField;
 use ark_std::{string::ToString, vec::Vec};
 use core::marker::PhantomData;
 use jf_primitives::{
     circuit::rescue::RescueNativeGadget,
+    pcs::CommitmentGroup,
     rescue::{RescueParameter, STATE_SIZE},
 };
 use jf_relation::{
@@ -47,7 +48,7 @@ where
     }
 
     // append the verification key and the public input
-    pub(crate) fn append_vk_and_pub_input_vars<E: PairingEngine<Fq = F>>(
+    pub(crate) fn append_vk_and_pub_input_vars<E: CommitmentGroup<Fq = F>>(
         &mut self,
         circuit: &mut PlonkCircuit<F>,
         vk_var: &VerifyingKeyVar<E>,
@@ -116,7 +117,7 @@ where
         poly_comm_var: &PointVariable,
     ) -> Result<(), CircuitError>
     where
-        E: PairingEngine<G1Affine = GroupAffine<P>>,
+        E: CommitmentGroup<G1Affine = GroupAffine<P>>,
         P: SWModelParameters<BaseField = F>,
     {
         // push the x and y coordinate of comm to the transcript
@@ -136,7 +137,7 @@ where
         poly_comm_vars: &[PointVariable],
     ) -> Result<(), CircuitError>
     where
-        E: PairingEngine<G1Affine = GroupAffine<P>>,
+        E: CommitmentGroup<G1Affine = GroupAffine<P>>,
         P: SWModelParameters<BaseField = F>,
     {
         for poly_comm_var in poly_comm_vars.iter() {
@@ -158,7 +159,7 @@ where
     }
 
     // Append the proof evaluation to the transcript
-    pub(crate) fn append_proof_evaluations_vars<E: PairingEngine>(
+    pub(crate) fn append_proof_evaluations_vars<E: CommitmentGroup>(
         &mut self,
         circuit: &mut PlonkCircuit<F>,
         evals: &ProofEvaluationsVar<F>,
@@ -187,7 +188,7 @@ where
         circuit: &mut PlonkCircuit<F>,
     ) -> Result<Variable, CircuitError>
     where
-        E: PairingEngine,
+        E: CommitmentGroup,
     {
         if !circuit.support_lookup() {
             return Err(ParameterError("does not support range table".to_string()));
@@ -234,7 +235,7 @@ mod tests {
         transcript::{PlonkTranscript, RescueTranscript},
     };
     use ark_bls12_377::Bls12_377;
-    use ark_ec::{AffineCurve, ProjectiveCurve};
+    use ark_ec::{AffineCurve, PairingEngine, ProjectiveCurve};
     use ark_std::{format, test_rng, UniformRand};
     use jf_primitives::pcs::prelude::{Commitment, UnivariateKzgPCS, UnivariateVerifierParam};
     use jf_relation::gadgets::ecc::Point;
@@ -247,7 +248,7 @@ mod tests {
     }
     fn test_rescue_transcript_challenge_circuit_helper<E, F, P>()
     where
-        E: PairingEngine<Fq = F, G1Affine = GroupAffine<P>>,
+        E: CommitmentGroup<Fq = F, G1Affine = GroupAffine<P>>,
         F: RescueParameter + SWToTEConParam,
         P: SWModelParameters<BaseField = F>,
     {

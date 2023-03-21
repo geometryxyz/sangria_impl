@@ -19,7 +19,10 @@ use ark_poly::{EvaluationDomain, Radix2EvaluationDomain};
 use ark_std::{format, vec, vec::Vec};
 use core::ops::Neg;
 use jf_primitives::{
-    pcs::{prelude::Commitment, PolynomialCommitmentScheme, UVPCS},
+    pcs::{
+        prelude::{Commitment, UnivariateVerifierParam},
+        CommitmentGroup, PolynomialCommitmentScheme, UVPCS,
+    },
     rescue::RescueParameter,
 };
 use jf_relation::{constants::GATE_WIDTH, gadgets::ecc::SWToTEConParam};
@@ -37,7 +40,7 @@ use jf_utils::multi_pairing;
 /// * `shifted_opening_proof` - (aggregated) proof of evaluations at point
 ///   `next_eval_point`.
 #[derive(Debug)]
-pub(crate) struct PcsInfo<E: PairingEngine> {
+pub(crate) struct PcsInfo<E: CommitmentGroup> {
     pub(crate) u: E::Fr,
     pub(crate) eval_point: E::Fr,
     pub(crate) next_eval_point: E::Fr,
@@ -47,13 +50,13 @@ pub(crate) struct PcsInfo<E: PairingEngine> {
     pub(crate) shifted_opening_proof: Commitment<E>,
 }
 
-pub(crate) struct Verifier<E: PairingEngine> {
+pub(crate) struct Verifier<E: CommitmentGroup> {
     pub(crate) domain: Radix2EvaluationDomain<E::Fr>,
 }
 
 impl<E, F, P> Verifier<E>
 where
-    E: PairingEngine<Fq = F, G1Affine = GroupAffine<P>>,
+    E: CommitmentGroup<Fq = F, G1Affine = GroupAffine<P>>,
     F: RescueParameter + SWToTEConParam,
     P: SWModelParameters<BaseField = F>,
 {
@@ -186,7 +189,13 @@ where
             shifted_opening_proof: batch_proof.shifted_opening_proof,
         })
     }
-
+}
+impl<E, F, P> Verifier<E>
+where
+    E: PairingEngine<Fq = F, G1Affine = GroupAffine<P>>,
+    F: RescueParameter + SWToTEConParam,
+    P: SWModelParameters<BaseField = F>,
+{
     /// Batchly verify multiple (aggregated) PCS opening proofs.
     ///
     /// We need to verify that
@@ -196,7 +205,10 @@ where
     ///   [shifted_open_proof_i] + comm_i - eval_i * [1]1`.
     /// By Schwartz-Zippel lemma, it's equivalent to check that for a random r:
     /// - `e(A0 + ... + r^{m-1} * Am, [x]2) = e(B0 + ... + r^{m-1} * Bm, [1]2)`.
-    pub(crate) fn batch_verify_opening_proofs<T, S: UVPCS<E>>(
+    pub(crate) fn batch_verify_opening_proofs<
+        T,
+        S: UVPCS<E, VerifierParam = UnivariateVerifierParam<E>>,
+    >(
         open_key: &OpenKey<E, S>,
         pcs_infos: &[PcsInfo<E>],
     ) -> Result<bool, PlonkError>
@@ -253,7 +265,14 @@ where
         // Check e(A, [x]2) ?= e(B, [1]2)
         Ok(multi_pairing::<E>(&g1_elems, &g2_elems) == E::Fqk::one())
     }
+}
 
+impl<E, F, P> Verifier<E>
+where
+    E: CommitmentGroup<Fq = F, G1Affine = GroupAffine<P>>,
+    F: RescueParameter + SWToTEConParam,
+    P: SWModelParameters<BaseField = F>,
+{
     /// Compute verifier challenges `tau`, `beta`, `gamma`, `alpha`, `zeta`,
     /// 'v', 'u'.
     #[inline]
@@ -784,7 +803,7 @@ where
 /// Private helper methods
 impl<E, F, P> Verifier<E>
 where
-    E: PairingEngine<Fq = F, G1Affine = GroupAffine<P>>,
+    E: CommitmentGroup<Fq = F, G1Affine = GroupAffine<P>>,
     F: RescueParameter + SWToTEConParam,
     P: SWModelParameters<BaseField = F>,
 {

@@ -7,12 +7,15 @@
 //! Circuits for Plonk verifiers.
 use crate::proof_system::{structs::VerifyingKey, verifier::Verifier};
 use ark_ec::{
-    short_weierstrass_jacobian::GroupAffine, PairingEngine, SWModelParameters as SWParam,
+    short_weierstrass_jacobian::GroupAffine, SWModelParameters as SWParam,
     TEModelParameters as TEParam,
 };
 use ark_ff::{BigInteger, FpParameters, PrimeField};
 use ark_std::{format, string::ToString, vec, vec::Vec};
-use jf_primitives::{pcs::PolynomialCommitmentScheme, rescue::RescueParameter};
+use jf_primitives::{
+    pcs::{CommitmentGroup, PolynomialCommitmentScheme},
+    rescue::RescueParameter,
+};
 use jf_relation::{
     errors::{CircuitError, CircuitError::ParameterError},
     gadgets::{
@@ -31,7 +34,7 @@ pub use structs::*;
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 /// Represent variable of a Plonk verifying key.
-pub struct VerifyingKeyVar<E: PairingEngine> {
+pub struct VerifyingKeyVar<E: CommitmentGroup> {
     /// The variables for the permutation polynomial commitments.
     pub(crate) sigma_comms: Vec<PointVariable>,
     /// The variables for the selector polynomial commitments.
@@ -50,14 +53,14 @@ pub struct VerifyingKeyVar<E: PairingEngine> {
     k: Vec<E::Fr>,
 }
 
-impl<E: PairingEngine> VerifyingKeyVar<E> {
+impl<E: CommitmentGroup> VerifyingKeyVar<E> {
     /// Create a variable for a Plonk verifying key.
     pub fn new<F, P, S: PolynomialCommitmentScheme<E>>(
         circuit: &mut PlonkCircuit<F>,
         verify_key: &VerifyingKey<E, S>,
     ) -> Result<Self, CircuitError>
     where
-        E: PairingEngine<Fq = F, G1Affine = GroupAffine<P>>,
+        E: CommitmentGroup<Fq = F, G1Affine = GroupAffine<P>>,
         F: PrimeField + SWToTEConParam,
         P: SWParam<BaseField = F>,
     {
@@ -156,7 +159,7 @@ impl<E: PairingEngine> VerifyingKeyVar<E> {
         blinding_factor: Variable,
     ) -> Result<(PointVariable, PointVariable), CircuitError>
     where
-        E: PairingEngine<Fq = F, G1Affine = GroupAffine<P>>,
+        E: CommitmentGroup<Fq = F, G1Affine = GroupAffine<P>>,
         F: RescueParameter + SWToTEConParam,
         P: SWParam<BaseField = F> + TEParam,
     {
@@ -284,7 +287,7 @@ pub trait BatchableCircuit<F> {
         vk_type_b_vars: &[VerifyingKeyVar<E>],
     ) -> Result<Vec<VerifyingKeyVar<E>>, CircuitError>
     where
-        E: PairingEngine,
+        E: CommitmentGroup,
         P: TEParam<BaseField = F>;
 }
 
@@ -299,7 +302,7 @@ where
         vk_type_b_vars: &[VerifyingKeyVar<E>],
     ) -> Result<Vec<VerifyingKeyVar<E>>, CircuitError>
     where
-        E: PairingEngine,
+        E: CommitmentGroup,
         P: TEParam<BaseField = F>,
     {
         if vk_type_a_vars.len() != vk_type_b_vars.len() {
@@ -329,7 +332,7 @@ mod test {
         transcript::{PlonkTranscript, RescueTranscript},
     };
     use ark_bls12_377::{g1::Parameters as Param377, Bls12_377, Fq as Fq377};
-    use ark_ec::{ProjectiveCurve, SWModelParameters, TEModelParameters};
+    use ark_ec::{PairingEngine, ProjectiveCurve, SWModelParameters, TEModelParameters};
     use ark_std::{test_rng, vec, UniformRand};
     use jf_primitives::{pcs::prelude::UnivariateKzgPCS, rescue::RescueParameter};
     use jf_relation::{
@@ -447,7 +450,7 @@ mod test {
         vk_var: &VerifyingKeyVar<E>,
         vk: &VerifyingKey<E, S>,
     ) where
-        E: PairingEngine<Fq = F, G1Affine = GroupAffine<P>>,
+        E: CommitmentGroup<Fq = F, G1Affine = GroupAffine<P>>,
         F: PrimeField + SWToTEConParam,
         P: SWParam<BaseField = F>,
     {
@@ -542,7 +545,11 @@ mod test {
                 &batch_proof,
                 blinding_factor,
             )?;
-            assert!(BatchArgument::decide::<UnivariateKzgPCS<E>>(open_key_ref, inner1, inner2)?);
+            assert!(BatchArgument::decide::<UnivariateKzgPCS<E>>(
+                open_key_ref,
+                inner1,
+                inner2
+            )?);
 
             {
                 // =======================================
@@ -705,7 +712,7 @@ mod test {
         blinding_factor: &E::Fr,
     ) -> Result<(PlonkCircuit<F>, (PointVariable, PointVariable)), CircuitError>
     where
-        E: PairingEngine<Fq = F, G1Affine = GroupAffine<P>>,
+        E: CommitmentGroup<Fq = F, G1Affine = GroupAffine<P>>,
         F: RescueParameter + SWToTEConParam,
         P: SWModelParameters<BaseField = F> + TEModelParameters,
     {

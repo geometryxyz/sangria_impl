@@ -7,8 +7,8 @@
 //! This module is a wrapper of the Merlin transcript.
 use super::PlonkTranscript;
 use crate::errors::PlonkError;
-use ark_ec::PairingEngine;
 use ark_ff::PrimeField;
+use jf_primitives::pcs::CommitmentGroup;
 use jf_utils::to_bytes;
 use merlin::Transcript;
 
@@ -32,7 +32,7 @@ impl<F> PlonkTranscript<F> for StandardTranscript {
     // and append it to the transcript
     fn get_and_append_challenge<E>(&mut self, label: &'static [u8]) -> Result<E::Fr, PlonkError>
     where
-        E: PairingEngine,
+        E: CommitmentGroup,
     {
         let mut buf = [0u8; 64];
         self.0.challenge_bytes(label, &mut buf);

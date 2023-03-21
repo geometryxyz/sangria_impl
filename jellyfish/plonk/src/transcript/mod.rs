@@ -19,11 +19,9 @@ use crate::{
     errors::PlonkError,
     proof_system::structs::{PlookupEvaluations, ProofEvaluations, VerifyingKey},
 };
-use ark_ec::{
-    short_weierstrass_jacobian::GroupAffine, PairingEngine, SWModelParameters as SWParam,
-};
+use ark_ec::{short_weierstrass_jacobian::GroupAffine, SWModelParameters as SWParam};
 use ark_ff::PrimeField;
-use jf_primitives::pcs::{prelude::Commitment, PolynomialCommitmentScheme};
+use jf_primitives::pcs::{prelude::Commitment, CommitmentGroup, PolynomialCommitmentScheme};
 use jf_utils::to_bytes;
 
 /// Defines transcript APIs.
@@ -47,7 +45,7 @@ pub trait PlonkTranscript<F> {
         pub_input: &[E::Fr],
     ) -> Result<(), PlonkError>
     where
-        E: PairingEngine<Fq = F, G1Affine = GroupAffine<P>>,
+        E: CommitmentGroup<Fq = F, G1Affine = GroupAffine<P>>,
         P: SWParam<BaseField = F>,
     {
         <Self as PlonkTranscript<F>>::append_message(
@@ -110,7 +108,7 @@ pub trait PlonkTranscript<F> {
         comms: &[Commitment<E>],
     ) -> Result<(), PlonkError>
     where
-        E: PairingEngine<Fq = F, G1Affine = GroupAffine<P>>,
+        E: CommitmentGroup<Fq = F, G1Affine = GroupAffine<P>>,
         P: SWParam<BaseField = F>,
     {
         for comm in comms.iter() {
@@ -126,7 +124,7 @@ pub trait PlonkTranscript<F> {
         comm: &Commitment<E>,
     ) -> Result<(), PlonkError>
     where
-        E: PairingEngine<Fq = F, G1Affine = GroupAffine<P>>,
+        E: CommitmentGroup<Fq = F, G1Affine = GroupAffine<P>>,
         P: SWParam<BaseField = F>,
     {
         <Self as PlonkTranscript<F>>::append_message(self, label, &to_bytes!(comm)?)
@@ -139,13 +137,13 @@ pub trait PlonkTranscript<F> {
         challenge: &E::Fr,
     ) -> Result<(), PlonkError>
     where
-        E: PairingEngine<Fq = F>,
+        E: CommitmentGroup<Fq = F>,
     {
         <Self as PlonkTranscript<F>>::append_message(self, label, &to_bytes!(challenge)?)
     }
 
     /// Append a proof evaluation to the transcript.
-    fn append_proof_evaluations<E: PairingEngine>(
+    fn append_proof_evaluations<E: CommitmentGroup>(
         &mut self,
         evals: &ProofEvaluations<E::Fr>,
     ) -> Result<(), PlonkError> {
@@ -167,7 +165,7 @@ pub trait PlonkTranscript<F> {
     }
 
     /// Append the plookup evaluation to the transcript.
-    fn append_plookup_evaluations<E: PairingEngine>(
+    fn append_plookup_evaluations<E: CommitmentGroup>(
         &mut self,
         evals: &PlookupEvaluations<E::Fr>,
     ) -> Result<(), PlonkError> {
@@ -207,5 +205,5 @@ pub trait PlonkTranscript<F> {
     /// and then append it to the transcript.
     fn get_and_append_challenge<E>(&mut self, label: &'static [u8]) -> Result<E::Fr, PlonkError>
     where
-        E: PairingEngine<Fq = F>;
+        E: CommitmentGroup<Fq = F>;
 }

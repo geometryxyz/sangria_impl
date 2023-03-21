@@ -25,26 +25,26 @@ use ark_std::{
     vec::Vec,
 };
 use jf_primitives::{
-    pcs::{PolynomialCommitmentScheme, UVPCS},
+    pcs::{prelude::UnivariateVerifierParam, CommitmentGroup, PolynomialCommitmentScheme, UVPCS},
     rescue::RescueParameter,
 };
 use jf_relation::{gadgets::ecc::SWToTEConParam, Circuit, MergeableCircuitType, PlonkCircuit};
 use jf_utils::multi_pairing;
 
 /// A batching argument.
-pub struct BatchArgument<E: PairingEngine>(PhantomData<E>);
+pub struct BatchArgument<E: CommitmentGroup>(PhantomData<E>);
 
 /// A circuit instance that consists of the corresponding proving
 /// key/verification key/circuit.
 #[derive(Clone)]
-pub struct Instance<E: PairingEngine, S: PolynomialCommitmentScheme<E>> {
+pub struct Instance<E: CommitmentGroup, S: PolynomialCommitmentScheme<E>> {
     // TODO: considering giving instance an ID
     prove_key: ProvingKey<E, S>, // the verification key can be obtained inside the proving key.
     circuit: PlonkCircuit<E::Fr>,
     _circuit_type: MergeableCircuitType,
 }
 
-impl<E: PairingEngine, S: PolynomialCommitmentScheme<E>> Instance<E, S> {
+impl<E: CommitmentGroup, S: PolynomialCommitmentScheme<E>> Instance<E, S> {
     /// Get verification key by reference.
     pub fn verify_key_ref(&self) -> &VerifyingKey<E, S> {
         &self.prove_key.vk
@@ -58,25 +58,10 @@ impl<E: PairingEngine, S: PolynomialCommitmentScheme<E>> Instance<E, S> {
 
 impl<E, F, P> BatchArgument<E>
 where
-    E: PairingEngine<Fq = F, G1Affine = GroupAffine<P>>,
+    E: CommitmentGroup<Fq = F, G1Affine = GroupAffine<P>>,
     F: RescueParameter + SWToTEConParam,
     P: SWModelParameters<BaseField = F>,
 {
-    /// Setup the circuit and the proving key for a (mergeable) instance.
-    pub fn setup_instance<S: UVPCS<E>>(
-        srs: &UniversalSrs<E, S>,
-        mut circuit: PlonkCircuit<E::Fr>,
-        circuit_type: MergeableCircuitType,
-    ) -> Result<Instance<E, S>, PlonkError> {
-        circuit.finalize_for_mergeable_circuit(circuit_type)?;
-        let (prove_key, _) = PlonkKzgSnark::preprocess(srs, &circuit)?;
-        Ok(Instance {
-            prove_key,
-            circuit,
-            _circuit_type: circuit_type,
-        })
-    }
-
     /// Prove satisfiability of multiple instances in a batch.
     pub fn batch_prove<R, S, T>(
         prng: &mut R,
@@ -182,9 +167,31 @@ where
     }
 }
 
+impl<E, F, P> BatchArgument<E>
+where
+    E: PairingEngine<Fq = F, G1Affine = GroupAffine<P>>,
+    F: RescueParameter + SWToTEConParam,
+    P: SWModelParameters<BaseField = F>,
+{
+    /// Setup the circuit and the proving key for a (mergeable) instance.
+    pub fn setup_instance<S: UVPCS<E, VerifierParam = UnivariateVerifierParam<E>>>(
+        srs: &UniversalSrs<E, S>,
+        mut circuit: PlonkCircuit<E::Fr>,
+        circuit_type: MergeableCircuitType,
+    ) -> Result<Instance<E, S>, PlonkError> {
+        circuit.finalize_for_mergeable_circuit(circuit_type)?;
+        let (prove_key, _) = PlonkKzgSnark::preprocess(srs, &circuit)?;
+        Ok(Instance {
+            prove_key,
+            circuit,
+            _circuit_type: circuit_type,
+        })
+    }
+}
+
 impl<E> BatchArgument<E>
 where
-    E: PairingEngine,
+    E: CommitmentGroup,
 {
     /// Aggregate verification keys
     pub fn aggregate_verify_keys<S: PolynomialCommitmentScheme<E>>(
@@ -204,9 +211,14 @@ where
             .map(|(vk_a, vk_b)| vk_a.merge(vk_b))
             .collect::<Result<Vec<_>, PlonkError>>()
     }
+}
 
+impl<E> BatchArgument<E>
+where
+    E: PairingEngine,
+{
     /// Perform the final pairing to verify the proof.
-    pub fn decide<S: UVPCS<E>>(
+    pub fn decide<S: UVPCS<E, VerifierParam = UnivariateVerifierParam<E>>>(
         open_key: &OpenKey<E, S>,
         inner1: E::G1Projective,
         inner2: E::G1Projective,
@@ -218,7 +230,7 @@ where
     }
 }
 
-pub(crate) fn new_mergeable_circuit_for_test<E: PairingEngine>(
+pub(crate) fn new_mergeable_circuit_for_test<E: CommitmentGroup>(
     shared_public_input: E::Fr,
     i: usize,
     circuit_type: MergeableCircuitType,
@@ -261,7 +273,7 @@ where
     F: RescueParameter + SWToTEConParam,
     P: SWModelParameters<BaseField = F>,
     R: CryptoRng + RngCore,
-    S: UVPCS<E>,
+    S: UVPCS<E, VerifierParam = UnivariateVerifierParam<E>>,
     T: PlonkTranscript<F>,
 {
     let mut instances_type_a = vec![];

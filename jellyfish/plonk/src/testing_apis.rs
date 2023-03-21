@@ -19,13 +19,13 @@ use crate::{
     },
     transcript::PlonkTranscript,
 };
-use ark_ec::{short_weierstrass_jacobian::GroupAffine, PairingEngine, SWModelParameters};
+use ark_ec::{short_weierstrass_jacobian::GroupAffine, SWModelParameters};
 use ark_ff::Field;
 use ark_poly::Radix2EvaluationDomain;
 use ark_std::vec::Vec;
 use hashbrown::HashMap;
 use jf_primitives::{
-    pcs::{prelude::Commitment, PolynomialCommitmentScheme},
+    pcs::{prelude::Commitment, CommitmentGroup, PolynomialCommitmentScheme},
     rescue::RescueParameter,
 };
 use jf_relation::gadgets::ecc::SWToTEConParam;
@@ -72,11 +72,11 @@ impl<F: Field> From<Challenges<F>> for structs::Challenges<F> {
 
 /// A wrapper of crate::proof_system::structs::ScalarsAndBases
 #[derive(Debug, Clone)]
-pub struct ScalarsAndBases<E: PairingEngine> {
+pub struct ScalarsAndBases<E: CommitmentGroup> {
     pub base_scalar_map: HashMap<E::G1Affine, E::Fr>,
 }
 
-impl<E: PairingEngine> From<structs::ScalarsAndBases<E>> for ScalarsAndBases<E> {
+impl<E: CommitmentGroup> From<structs::ScalarsAndBases<E>> for ScalarsAndBases<E> {
     fn from(other: structs::ScalarsAndBases<E>) -> Self {
         Self {
             base_scalar_map: other.base_scalar_map,
@@ -84,7 +84,7 @@ impl<E: PairingEngine> From<structs::ScalarsAndBases<E>> for ScalarsAndBases<E> 
     }
 }
 
-impl<E: PairingEngine> From<ScalarsAndBases<E>> for structs::ScalarsAndBases<E> {
+impl<E: CommitmentGroup> From<ScalarsAndBases<E>> for structs::ScalarsAndBases<E> {
     fn from(other: ScalarsAndBases<E>) -> Self {
         Self {
             base_scalar_map: other.base_scalar_map,
@@ -92,7 +92,7 @@ impl<E: PairingEngine> From<ScalarsAndBases<E>> for structs::ScalarsAndBases<E> 
     }
 }
 
-impl<E: PairingEngine> ScalarsAndBases<E> {
+impl<E: CommitmentGroup> ScalarsAndBases<E> {
     /// Compute the multi-scalar multiplication.
     pub fn multi_scalar_mul(&self) -> E::G1Projective {
         let tmp: structs::ScalarsAndBases<E> = self.clone().into();
@@ -102,7 +102,7 @@ impl<E: PairingEngine> ScalarsAndBases<E> {
 
 /// A wrapper of crate::proof_system::verifier::PcsInfo
 #[derive(Debug, Clone)]
-pub struct PcsInfo<E: PairingEngine> {
+pub struct PcsInfo<E: CommitmentGroup> {
     /// TODO: change back these visibilities
     pub u: E::Fr,
     ///
@@ -119,7 +119,7 @@ pub struct PcsInfo<E: PairingEngine> {
     pub shifted_opening_proof: Commitment<E>,
 }
 
-impl<E: PairingEngine> From<PcsInfo<E>> for verifier::PcsInfo<E> {
+impl<E: CommitmentGroup> From<PcsInfo<E>> for verifier::PcsInfo<E> {
     fn from(other: PcsInfo<E>) -> Self {
         Self {
             u: other.u,
@@ -133,7 +133,7 @@ impl<E: PairingEngine> From<PcsInfo<E>> for verifier::PcsInfo<E> {
     }
 }
 
-impl<E: PairingEngine> From<verifier::PcsInfo<E>> for PcsInfo<E> {
+impl<E: CommitmentGroup> From<verifier::PcsInfo<E>> for PcsInfo<E> {
     fn from(other: verifier::PcsInfo<E>) -> Self {
         Self {
             u: other.u,
@@ -149,11 +149,11 @@ impl<E: PairingEngine> From<verifier::PcsInfo<E>> for PcsInfo<E> {
 
 /// A wrapper of crate::proof_system::verifier::Verifier
 #[derive(Debug, Clone)]
-pub struct Verifier<E: PairingEngine> {
+pub struct Verifier<E: CommitmentGroup> {
     pub(crate) domain: Radix2EvaluationDomain<E::Fr>,
 }
 
-impl<E: PairingEngine> From<Verifier<E>> for verifier::Verifier<E> {
+impl<E: CommitmentGroup> From<Verifier<E>> for verifier::Verifier<E> {
     fn from(other: Verifier<E>) -> Self {
         Self {
             domain: other.domain,
@@ -161,7 +161,7 @@ impl<E: PairingEngine> From<Verifier<E>> for verifier::Verifier<E> {
     }
 }
 
-impl<E: PairingEngine> From<verifier::Verifier<E>> for Verifier<E> {
+impl<E: CommitmentGroup> From<verifier::Verifier<E>> for Verifier<E> {
     fn from(other: verifier::Verifier<E>) -> Self {
         Self {
             domain: other.domain,
@@ -171,7 +171,7 @@ impl<E: PairingEngine> From<verifier::Verifier<E>> for Verifier<E> {
 
 impl<E, F, P> Verifier<E>
 where
-    E: PairingEngine<Fq = F, G1Affine = GroupAffine<P>>,
+    E: CommitmentGroup<Fq = F, G1Affine = GroupAffine<P>>,
     F: RescueParameter + SWToTEConParam,
     P: SWModelParameters<BaseField = F>,
 {

@@ -12,8 +12,10 @@ mod structs;
 mod transcript;
 mod univariate_kzg;
 
-use ark_ec::PairingEngine;
-use ark_ff::Field;
+use core::ops::MulAssign;
+
+use ark_ec::{AffineCurve, PairingEngine, ProjectiveCurve};
+use ark_ff::{Field, PrimeField, SquareRootField};
 use ark_poly::univariate::DensePolynomial;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use ark_std::{
@@ -24,35 +26,59 @@ use ark_std::{
     vec::Vec,
 };
 use errors::PCSError;
-use prelude::UnivariateVerifierParam;
 
 use self::prelude::Commitment;
 
 /// A more restricted variant of the `PolynomialCommitmentScheme` trait
 // TODO(fga): this should be resolved by https://github.com/rust-lang/rust/issues/41517
 // type UVPCS<E> = PolynomialCommitmentScheme<E, Polynomial = DensePolynomial<E::Fr>, Commitment = Commitment<E>>;
-pub trait UVPCS<E: PairingEngine>:
+pub trait UVPCS<E: CommitmentGroup>:
     PolynomialCommitmentScheme<
         E,
-        Polynomial = DensePolynomial<<E as PairingEngine>::Fr>,
+        Polynomial = DensePolynomial<<E as CommitmentGroup>::Fr>,
         Commitment = Commitment<E>,
         BatchCommitment = Vec<Commitment<E>>,
-        VerifierParam = UnivariateVerifierParam<E>,
     > + Sync
 {
 }
 
 impl<
-        E: PairingEngine,
+        E: CommitmentGroup,
         S: PolynomialCommitmentScheme<
                 E,
-                Polynomial = DensePolynomial<<E as PairingEngine>::Fr>,
+                Polynomial = DensePolynomial<<E as CommitmentGroup>::Fr>,
                 Commitment = Commitment<E>,
                 BatchCommitment = Vec<Commitment<E>>,
-                VerifierParam = UnivariateVerifierParam<E>,
             > + Sync,
     > UVPCS<E> for S
 {
+}
+
+/// This trait defines the common APIs for a commitment group.
+pub trait CommitmentGroup: Sized + 'static + Copy + Debug + Sync + Send + Eq + PartialEq {
+    /// This is the scalar field of the group.
+    type Fr: PrimeField + SquareRootField;
+
+    /// The projective representation of an element in G1.
+    type G1Projective: ProjectiveCurve<BaseField = Self::Fq, ScalarField = Self::Fr, Affine = Self::G1Affine>
+        + From<Self::G1Affine>
+        + Into<Self::G1Affine>
+        + MulAssign<Self::Fr>; // needed due to https://github.com/rust-lang/rust/issues/69640
+
+    /// The affine representation of an element in G1.
+    type G1Affine: AffineCurve<BaseField = Self::Fq, ScalarField = Self::Fr, Projective = Self::G1Projective>
+        + From<Self::G1Projective>
+        + Into<Self::G1Projective>;
+
+    /// The base field
+    type Fq: PrimeField + SquareRootField;
+}
+
+impl<E: PairingEngine> CommitmentGroup for E {
+    type Fr = E::Fr;
+    type G1Affine = E::G1Affine;
+    type G1Projective = E::G1Projective;
+    type Fq = E::Fq;
 }
 
 /// This trait defines the max degree supported by an SRS
@@ -63,7 +89,7 @@ pub trait WithMaxDegree {
 /// This trait defines APIs for polynomial commitment schemes.
 /// Note that for our usage, this PCS is not hiding.
 /// TODO(#187): add hiding property.
-pub trait PolynomialCommitmentScheme<E: PairingEngine> {
+pub trait PolynomialCommitmentScheme<E: CommitmentGroup> {
     /// Prover parameters
     type ProverParam: Clone
         + Debug
