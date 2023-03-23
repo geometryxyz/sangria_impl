@@ -7,7 +7,8 @@
 //! Main module for univariate KZG commitment scheme
 
 use crate::pcs::{
-    prelude::Commitment, PCSError, PolynomialCommitmentScheme, StructuredReferenceString, CommitmentGroup,
+    prelude::Commitment, CommitmentGroup, PCSError, PolynomialCommitmentScheme,
+    StructuredReferenceString,
 };
 use ark_ec::{msm::VariableBaseMSM, AffineCurve, PairingEngine, ProjectiveCurve};
 use ark_ff::PrimeField;
@@ -28,7 +29,6 @@ use jf_utils::par_utils::parallelizable_slice_iter;
 #[cfg(feature = "parallel")]
 use rayon::prelude::*;
 use srs::{UnivariateProverParam, UnivariateUniversalParams, UnivariateVerifierParam};
-
 
 pub(crate) mod srs;
 

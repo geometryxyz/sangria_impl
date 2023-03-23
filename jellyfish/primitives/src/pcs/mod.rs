@@ -10,6 +10,7 @@ mod multilinear_kzg;
 pub mod prelude;
 mod structs;
 mod transcript;
+mod univariate_ipa;
 mod univariate_kzg;
 
 use core::ops::MulAssign;

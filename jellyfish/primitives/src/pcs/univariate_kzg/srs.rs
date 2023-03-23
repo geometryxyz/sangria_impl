@@ -39,7 +39,7 @@ impl<E: PairingEngine> UnivariateUniversalParams<E> {
     }
 }
 
-impl <E:PairingEngine> WithMaxDegree for UnivariateUniversalParams<E> {
+impl<E: PairingEngine> WithMaxDegree for UnivariateUniversalParams<E> {
     fn max_degree(&self) -> usize {
         self.max_degree()
     }

@@ -26,6 +26,8 @@ pub enum PCSError {
     SerializationError(SerializationError),
     /// Transcript error {0}
     TranscriptError(TranscriptError),
+    /// Error from the internal ark_poly_commit primitive
+    ArkPolyCommitError(ark_poly_commit::Error),
 }
 
 impl From<SerializationError> for PCSError {
@@ -37,5 +39,11 @@ impl From<SerializationError> for PCSError {
 impl From<TranscriptError> for PCSError {
     fn from(e: TranscriptError) -> Self {
         Self::TranscriptError(e)
+    }
+}
+
+impl From<ark_poly_commit::Error> for PCSError {
+    fn from(e: ark_poly_commit::Error) -> Self {
+        Self::ArkPolyCommitError(e)
     }
 }
