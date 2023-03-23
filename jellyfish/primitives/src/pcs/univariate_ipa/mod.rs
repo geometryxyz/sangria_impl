@@ -260,8 +260,46 @@ impl<G: AffineCurve> WithMaxDegree for ipa_pc::UniversalParams<G> {
 
 #[cfg(test)]
 mod tests {
+    use ark_bls12_377::Bls12_377;
+    use ark_ff::UniformRand;
+    use ark_poly::{univariate::DensePolynomial, UVPolynomial};
+
+    use crate::pcs::PolynomialCommitmentScheme;
+
+    use super::UnivariateIPA;
+
+    type IPA = UnivariateIPA<Bls12_377>;
+
     #[test]
-    fn it_works() {
-        assert!(true)
+    fn test_crs_generation_and_trim() {
+        let mut rng = ark_std::test_rng();
+
+        let max_degree = 10;
+        let crs = IPA::gen_srs_for_testing(&mut rng, max_degree).unwrap();
+
+        let supported_degree = 8;
+        let (_pk, _vk) = IPA::trim(crs, supported_degree, None).unwrap();
+    }
+
+    #[test]
+    fn test_commit_and_open() {
+        let mut rng = ark_std::test_rng();
+
+        let max_degree = 10;
+        let crs = IPA::gen_srs_for_testing(&mut rng, max_degree).unwrap();
+
+        let supported_degree = 8;
+        let (pk, vk) = IPA::trim(crs, supported_degree, None).unwrap();
+
+        let polynomial = DensePolynomial::<ark_bls12_377::Fr>::rand(supported_degree, &mut rng);
+
+        let commitment = IPA::commit(&pk, &polynomial).unwrap();
+
+        let eval_point = ark_bls12_377::Fr::rand(&mut rng);
+        let (opening_proof, eval) = IPA::open(&pk, &polynomial, &eval_point).unwrap();
+
+        let res = IPA::verify(&vk, &commitment, &eval_point, &eval, &opening_proof).unwrap();
+
+        assert!(res)
     }
 }
