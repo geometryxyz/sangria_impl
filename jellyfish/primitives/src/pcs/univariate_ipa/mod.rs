@@ -140,10 +140,9 @@ impl<E: CommitmentGroup> PolynomialCommitmentScheme<E> for UnivariateIPA<E> {
         rng: &mut R,
         supported_size: usize,
     ) -> Result<Self::SRS, PCSError> {
-        // arkworks have a hard-coded +3. We therefore use a hardcoded -3 to match.
         let arkworks_srs =
             ipa_pc::InnerProductArgPC::<E::G1Affine, Blake2s, DensePolynomial<E::Fr>>::setup(
-                supported_size - 3,
+                supported_size,
                 None,
                 rng,
             )?;
@@ -260,6 +259,8 @@ impl<G: AffineCurve> WithMaxDegree for ipa_pc::UniversalParams<G> {
 
 #[cfg(test)]
 mod tests {
+    use std::println;
+
     use ark_bls12_377::Bls12_377;
     use ark_ff::UniformRand;
     use ark_poly::{univariate::DensePolynomial, UVPolynomial};
@@ -290,6 +291,8 @@ mod tests {
 
         let supported_degree = 8;
         let (pk, vk) = IPA::trim(crs, supported_degree, None).unwrap();
+
+        println!("HERE");
 
         let polynomial = DensePolynomial::<ark_bls12_377::Fr>::rand(supported_degree, &mut rng);
 
