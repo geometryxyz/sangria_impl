@@ -17,6 +17,9 @@ use jf_utils::Vec;
 
 use super::{prelude::PCSError, CommitmentGroup, PolynomialCommitmentScheme, WithMaxDegree};
 
+/// An inner-product argument polynomial commitment scheme. We wrap around the one provided by arkworks.
+/// Note however that we do not enforce degree bounds as these are not required by the PLONK protocol (see Remark 4.2)
+/// in the PLONK paper. We also do not allow for hiding commitments as we follow the Jellyfish PCS trait, see here <https://github.com/geometryresearch/sangria_impl/blob/ipa/jellyfish/primitives/src/pcs/mod.rs#L171-L172>
 #[derive(Debug)]
 pub struct UnivariateIPA<E: CommitmentGroup> {
     phantom: PhantomData<E>,
@@ -71,6 +74,7 @@ impl<G: AffineCurve> Into<ipa_pc::CommitterKey<G>> for &ProverParam<G> {
     }
 }
 
+/// Like in the arkworks IPA< our verifier key is the same as the prover key.
 pub type VerifierParam<G> = ProverParam<G>;
 
 /// The `Proof` type is identical to arkwork's `ipa_pc::Proof` type but has an implementation of Eq as required
