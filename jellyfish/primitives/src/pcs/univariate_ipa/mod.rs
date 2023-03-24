@@ -5,7 +5,7 @@ use ark_ec::AffineCurve;
 use ark_ff::{Field, One};
 use ark_poly::{univariate::DensePolynomial, Polynomial};
 use ark_poly_commit::{
-    ipa_pc, LabeledCommitment, LabeledPolynomial, PCCommitment, PolynomialCommitment, PCRandomness,
+    ipa_pc, LabeledCommitment, LabeledPolynomial, PCCommitment, PCRandomness, PolynomialCommitment,
 };
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, Read, SerializationError, Write};
 use ark_std::{
@@ -16,6 +16,9 @@ use blake2::Blake2s;
 use jf_utils::Vec;
 
 use super::{prelude::PCSError, CommitmentGroup, PolynomialCommitmentScheme, WithMaxDegree};
+
+type ArkworksIPA<G> =
+    ipa_pc::InnerProductArgPC<G, Blake2s, DensePolynomial<<G as AffineCurve>::ScalarField>>;
 
 /// An inner-product argument polynomial commitment scheme. We wrap around the one provided by arkworks.
 /// Note however that we do not enforce degree bounds as these are not required by the PLONK protocol (see Remark 4.2)
@@ -144,12 +147,7 @@ impl<E: CommitmentGroup> PolynomialCommitmentScheme<E> for UnivariateIPA<E> {
         rng: &mut R,
         supported_size: usize,
     ) -> Result<Self::SRS, PCSError> {
-        let arkworks_srs =
-            ipa_pc::InnerProductArgPC::<E::G1Affine, Blake2s, DensePolynomial<E::Fr>>::setup(
-                supported_size,
-                None,
-                rng,
-            )?;
+        let arkworks_srs = ArkworksIPA::setup(supported_size, None, rng)?;
 
         Ok(arkworks_srs)
     }
@@ -159,11 +157,8 @@ impl<E: CommitmentGroup> PolynomialCommitmentScheme<E> for UnivariateIPA<E> {
         supported_degree: usize,
         _supported_num_vars: Option<usize>,
     ) -> Result<(Self::ProverParam, Self::VerifierParam), super::prelude::PCSError> {
-        let (arkworks_ck, arkworks_vk) = ipa_pc::InnerProductArgPC::<
-            E::G1Affine,
-            Blake2s,
-            DensePolynomial<E::Fr>,
-        >::trim(srs.borrow(), supported_degree, 0, None)?;
+        let (arkworks_ck, arkworks_vk) =
+            ArkworksIPA::trim(srs.borrow(), supported_degree, 0, None)?;
 
         Ok((arkworks_ck.into(), arkworks_vk.into()))
     }
@@ -173,11 +168,7 @@ impl<E: CommitmentGroup> PolynomialCommitmentScheme<E> for UnivariateIPA<E> {
         poly: &Self::Polynomial,
     ) -> Result<Self::Commitment, super::prelude::PCSError> {
         let arkworks_commitment =
-            ipa_pc::InnerProductArgPC::<E::G1Affine, Blake2s, DensePolynomial<E::Fr>>::commit(
-                &prover_param.borrow().into(),
-                &[to_labeled(poly)],
-                None,
-            )?;
+            ArkworksIPA::commit(&prover_param.borrow().into(), &[to_labeled(poly)], None)?;
 
         Ok(arkworks_commitment.0[0].commitment().clone())
     }
@@ -189,18 +180,17 @@ impl<E: CommitmentGroup> PolynomialCommitmentScheme<E> for UnivariateIPA<E> {
     ) -> Result<(Self::Proof, Self::Evaluation), super::prelude::PCSError> {
         let evaluation = polynomial.evaluate(point);
 
-        let commitment = Self::commit(prover_param.borrow(), polynomial)?;
+        let commitment = Self::commit(prover_param.borrow(), polynomial)?; // an unfortunate artifact of arkworks, we *need* the commitment to produce an opening proof...
 
-        let arkworks_opening_proof =
-            ipa_pc::InnerProductArgPC::<E::G1Affine, Blake2s, DensePolynomial<E::Fr>>::open(
-                &prover_param.borrow().into(),
-                &[to_labeled(polynomial)],
-                &[to_labeled_cm(&commitment)],
-                point,
-                E::Fr::one(),
-                &[ipa_pc::Randomness::empty()],
-                None,
-            )?;
+        let arkworks_opening_proof = ArkworksIPA::open(
+            &prover_param.borrow().into(),
+            &[to_labeled(polynomial)],
+            &[to_labeled_cm(&commitment)],
+            point,
+            E::Fr::one(),
+            &[ipa_pc::Randomness::empty()],
+            None,
+        )?;
 
         Ok((arkworks_opening_proof.into(), evaluation))
     }
@@ -214,7 +204,7 @@ impl<E: CommitmentGroup> PolynomialCommitmentScheme<E> for UnivariateIPA<E> {
     ) -> Result<bool, super::prelude::PCSError> {
         let arkworks_proof = proof.into();
 
-        let res = ipa_pc::InnerProductArgPC::<E::G1Affine, Blake2s, DensePolynomial<E::Fr>>::check(
+        let res = ArkworksIPA::check(
             &verifier_param.borrow().into(),
             &[to_labeled_cm(commitment)],
             point,
