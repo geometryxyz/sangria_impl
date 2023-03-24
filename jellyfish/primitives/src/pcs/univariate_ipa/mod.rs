@@ -5,7 +5,7 @@ use ark_ec::AffineCurve;
 use ark_ff::{Field, One};
 use ark_poly::{univariate::DensePolynomial, Polynomial};
 use ark_poly_commit::{
-    ipa_pc, LabeledCommitment, LabeledPolynomial, PCCommitment, PolynomialCommitment,
+    ipa_pc, LabeledCommitment, LabeledPolynomial, PCCommitment, PolynomialCommitment, PCRandomness,
 };
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, Read, SerializationError, Write};
 use ark_std::{
@@ -23,11 +23,11 @@ pub struct UnivariateIPA<E: CommitmentGroup> {
 }
 
 fn to_labeled<F: Field>(poly: &DensePolynomial<F>) -> LabeledPolynomial<F, DensePolynomial<F>> {
-    LabeledPolynomial::new(String::from("{}"), poly.clone(), None, None)
+    LabeledPolynomial::new(String::from(""), poly.clone(), None, None)
 }
 
 fn to_labeled_cm<C: PCCommitment>(cm: &C) -> LabeledCommitment<C> {
-    LabeledCommitment::new(String::from("{}"), cm.clone(), None)
+    LabeledCommitment::new(String::from(""), cm.clone(), None)
 }
 
 /// The `ProverParams` type is identical to arkwork's `CommitKey` type but has an implementation of Eq as required
@@ -194,7 +194,7 @@ impl<E: CommitmentGroup> PolynomialCommitmentScheme<E> for UnivariateIPA<E> {
                 &[to_labeled_cm(&commitment)],
                 point,
                 E::Fr::one(),
-                &[],
+                &[ipa_pc::Randomness::empty()],
                 None,
             )?;
 
@@ -258,41 +258,68 @@ impl<G: AffineCurve> WithMaxDegree for ipa_pc::UniversalParams<G> {
 }
 
 #[cfg(test)]
+#[allow(unused)]
 mod tests {
     use std::println;
 
     use ark_bls12_377::Bls12_377;
     use ark_ff::UniformRand;
     use ark_poly::{univariate::DensePolynomial, UVPolynomial};
+    use ark_poly_commit::{ipa_pc, LabeledPolynomial, PolynomialCommitment};
+    use ark_std::{string::String, test_rng, vec};
+    use blake2::Blake2s;
 
     use crate::pcs::PolynomialCommitmentScheme;
 
     use super::UnivariateIPA;
 
     type IPA = UnivariateIPA<Bls12_377>;
+    type ArkworksIPA = ipa_pc::InnerProductArgPC<
+        ark_bls12_377::G1Affine,
+        Blake2s,
+        DensePolynomial<ark_bls12_377::Fr>,
+    >;
 
     #[test]
     fn test_crs_generation_and_trim() {
-        let mut rng = ark_std::test_rng();
+        let mut rng = test_rng();
 
         let max_degree = 10;
-        let crs = IPA::gen_srs_for_testing(&mut rng, max_degree).unwrap();
-
         let supported_degree = 8;
-        let (_pk, _vk) = IPA::trim(crs, supported_degree, None).unwrap();
+
+        let crs = IPA::gen_srs_for_testing(&mut rng, max_degree).unwrap();
+        let (pk, vk) = IPA::trim(crs.clone(), supported_degree, None).unwrap();
+
+        let arkworks_crs = ArkworksIPA::setup(max_degree, Some(1), &mut rng).unwrap();
+
+        assert_eq!(arkworks_crs.comm_key, crs.comm_key);
+        assert_eq!(arkworks_crs.h, crs.h);
+        assert_eq!(arkworks_crs.s, arkworks_crs.s);
+
+        let (arkworks_pk, arkworks_vk) =
+            ArkworksIPA::trim(&arkworks_crs, supported_degree, 0, None).unwrap();
+
+        assert_eq!(arkworks_pk.comm_key, pk.comm_key);
+        assert_eq!(arkworks_pk.h, pk.h);
+        assert_eq!(arkworks_pk.s, pk.s);
+        assert_eq!(arkworks_pk.max_degree, pk.max_degree);
+
+        assert_eq!(arkworks_vk.comm_key, vk.comm_key);
+        assert_eq!(arkworks_vk.h, vk.h);
+        assert_eq!(arkworks_vk.s, vk.s);
+        assert_eq!(arkworks_vk.max_degree, vk.max_degree);
     }
 
     #[test]
     fn test_commit_and_open() {
-        let mut rng = ark_std::test_rng();
+        let mut rng = test_rng();
 
         let max_degree = 10;
+        let supported_degree = 8;
+
         let crs = IPA::gen_srs_for_testing(&mut rng, max_degree).unwrap();
 
-        let supported_degree = 8;
         let (pk, vk) = IPA::trim(crs, supported_degree, None).unwrap();
-
-        println!("HERE");
 
         let polynomial = DensePolynomial::<ark_bls12_377::Fr>::rand(supported_degree, &mut rng);
 
