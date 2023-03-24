@@ -213,24 +213,54 @@ impl<E: CommitmentGroup> PolynomialCommitmentScheme<E> for UnivariateIPA<E> {
             E::Fr::one(),
             None,
         )?;
-
         Ok(res)
     }
 
     fn batch_commit(
-        _prover_param: impl Borrow<Self::ProverParam>,
-        _polys: &[Self::Polynomial],
+        prover_param: impl Borrow<Self::ProverParam>,
+        polys: &[Self::Polynomial],
     ) -> Result<Self::BatchCommitment, super::prelude::PCSError> {
-        todo!()
+        let labeled_polynomials: Vec<LabeledPolynomial<E::Fr, DensePolynomial<E::Fr>>> =
+            polys.iter().map(|p| to_labeled(p)).collect();
+
+        let (labeled_commitments, _batch_randomness) =
+            ArkworksIPA::commit(&prover_param.borrow().into(), &labeled_polynomials, None)?;
+
+        let commitments = labeled_commitments
+            .iter()
+            .map(|comm| comm.commitment().clone())
+            .collect();
+
+        Ok(commitments)
     }
 
     fn batch_open(
-        _prover_param: impl Borrow<Self::ProverParam>,
-        _batch_commitment: &Self::BatchCommitment,
-        _polynomials: &[Self::Polynomial],
-        _points: &[Self::Point],
+        prover_param: impl Borrow<Self::ProverParam>,
+        batch_commitment: &Self::BatchCommitment,
+        polynomials: &[Self::Polynomial],
+        points: &[Self::Point],
     ) -> Result<(Self::BatchProof, Vec<Self::Evaluation>), super::prelude::PCSError> {
-        todo!()
+
+        let mut batch_proof: Self::BatchProof = Vec::new();
+        let mut evals: Vec<E::Fr> = Vec::new();
+        for ((polynomial, commitment), point) in polynomials.iter().zip(batch_commitment.iter()).zip(points.iter()) {
+            let eval = polynomial.evaluate(point);
+
+            let arkworks_opening_proof = ArkworksIPA::open(
+                &prover_param.borrow().into(),
+                &[to_labeled(polynomial)],
+                &[to_labeled_cm(commitment)],
+                point,
+                E::Fr::one(),
+                &[ipa_pc::Randomness::empty()],
+                None,
+            )?;
+
+            evals.push(eval);
+            batch_proof.push(arkworks_opening_proof.into())
+        }
+
+        Ok((batch_proof, evals))
     }
 
     fn batch_verify<R: RngCore + CryptoRng>(
