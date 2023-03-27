@@ -170,7 +170,7 @@ impl<E: CommitmentGroup> PolynomialCommitmentScheme<E> for UnivariateIPA<E> {
         let arkworks_commitment =
             ArkworksIPA::commit(&prover_param.borrow().into(), &[to_labeled(poly)], None)?;
 
-        Ok(arkworks_commitment.0[0].commitment().clone())
+        Ok(*arkworks_commitment.0[0].commitment())
     }
 
     fn open(
@@ -221,14 +221,14 @@ impl<E: CommitmentGroup> PolynomialCommitmentScheme<E> for UnivariateIPA<E> {
         polys: &[Self::Polynomial],
     ) -> Result<Self::BatchCommitment, super::prelude::PCSError> {
         let labeled_polynomials: Vec<LabeledPolynomial<E::Fr, DensePolynomial<E::Fr>>> =
-            polys.iter().map(|p| to_labeled(p)).collect();
+            polys.iter().map(to_labeled).collect();
 
         let (labeled_commitments, _batch_randomness) =
             ArkworksIPA::commit(&prover_param.borrow().into(), &labeled_polynomials, None)?;
 
         let commitments = labeled_commitments
             .iter()
-            .map(|comm| comm.commitment().clone())
+            .map(|comm| *comm.commitment())
             .collect();
 
         Ok(commitments)
@@ -283,7 +283,7 @@ impl<E: CommitmentGroup> PolynomialCommitmentScheme<E> for UnivariateIPA<E> {
             .zip(batch_proof.iter())
         {
             let res = Self::verify(verifier_param, commitment, point, value, proof)?;
-            if res == false {
+            if !res {
                 batch_res = false;
                 return Ok(batch_res);
             }
