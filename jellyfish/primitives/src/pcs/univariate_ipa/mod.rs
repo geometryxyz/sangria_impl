@@ -240,10 +240,13 @@ impl<E: CommitmentGroup> PolynomialCommitmentScheme<E> for UnivariateIPA<E> {
         polynomials: &[Self::Polynomial],
         points: &[Self::Point],
     ) -> Result<(Self::BatchProof, Vec<Self::Evaluation>), super::prelude::PCSError> {
-
         let mut batch_proof: Self::BatchProof = Vec::new();
         let mut evals: Vec<E::Fr> = Vec::new();
-        for ((polynomial, commitment), point) in polynomials.iter().zip(batch_commitment.iter()).zip(points.iter()) {
+        for ((polynomial, commitment), point) in polynomials
+            .iter()
+            .zip(batch_commitment.iter())
+            .zip(points.iter())
+        {
             let eval = polynomial.evaluate(point);
 
             let arkworks_opening_proof = ArkworksIPA::open(
@@ -263,6 +266,7 @@ impl<E: CommitmentGroup> PolynomialCommitmentScheme<E> for UnivariateIPA<E> {
         Ok((batch_proof, evals))
     }
 
+    // naive implementation, we verify each proof individually.
     fn batch_verify<R: RngCore + CryptoRng>(
         _verifier_param: &Self::VerifierParam,
         _multi_commitment: &Self::BatchCommitment,
@@ -288,8 +292,10 @@ mod tests {
 
     use ark_bls12_377::Bls12_377;
     use ark_ff::UniformRand;
-    use ark_poly::{univariate::DensePolynomial, UVPolynomial};
-    use ark_poly_commit::{ipa_pc, LabeledPolynomial, PolynomialCommitment};
+    use ark_poly::{evaluations, univariate::DensePolynomial, UVPolynomial};
+    use ark_poly_commit::{
+        ipa_pc, Evaluations, LabeledPolynomial, PCRandomness, PolynomialCommitment, QuerySet,
+    };
     use ark_std::{string::String, test_rng, vec};
     use blake2::Blake2s;
 
@@ -353,6 +359,90 @@ mod tests {
         let (opening_proof, eval) = IPA::open(&pk, &polynomial, &eval_point).unwrap();
 
         let res = IPA::verify(&vk, &commitment, &eval_point, &eval, &opening_proof).unwrap();
+
+        assert!(res)
+    }
+
+    #[test]
+    fn test_arkworks_batch() {
+        let mut rng = test_rng();
+
+        let max_degree = 10;
+        let supported_degree = 8;
+
+        let a = DensePolynomial::<ark_bls12_377::Fr>::rand(supported_degree, &mut rng);
+        let a = LabeledPolynomial::new(String::from("a"), a, None, None);
+
+        let b = DensePolynomial::<ark_bls12_377::Fr>::rand(supported_degree, &mut rng);
+        let b = LabeledPolynomial::new(String::from("b"), b, None, None);
+
+        let c = DensePolynomial::<ark_bls12_377::Fr>::rand(supported_degree, &mut rng);
+        let c = LabeledPolynomial::new(String::from("c"), c, None, None);
+
+        let polynomials = vec![a.clone(), b.clone(), c.clone()];
+
+        let crs = ArkworksIPA::setup(max_degree, Some(1), &mut rng).unwrap();
+
+        let (pk, vk) = ArkworksIPA::trim(&crs, supported_degree, 0, None).unwrap();
+
+        let (commitments, randomnesses) = ArkworksIPA::commit(&pk, &polynomials, None).unwrap();
+
+        let new_rands = vec![ipa_pc::Randomness::<ark_bls12_377::G1Affine>::empty(); 3];
+
+        let evaluation_point_a = ark_bls12_377::Fr::rand(&mut rng);
+        let evaluation_point_b = ark_bls12_377::Fr::rand(&mut rng);
+        let evaluation_point_c = ark_bls12_377::Fr::rand(&mut rng);
+        let mut evaluations = Evaluations::new();
+        evaluations.insert(
+            (String::from("a"), evaluation_point_a),
+            a.evaluate(&evaluation_point_a),
+        );
+        evaluations.insert(
+            (String::from("b"), evaluation_point_b),
+            b.evaluate(&evaluation_point_b),
+        );
+        evaluations.insert(
+            (String::from("c"), evaluation_point_c),
+            c.evaluate(&evaluation_point_c),
+        );
+
+        let mut query_set = QuerySet::new();
+        query_set.insert((
+            String::from("a"),
+            (String::from("evaluation_point_a"), evaluation_point_a),
+        ));
+        query_set.insert((
+            String::from("b"),
+            (String::from("evaluation_point_b"), evaluation_point_b),
+        ));
+        query_set.insert((
+            String::from("c"),
+            (String::from("evaluation_point_c"), evaluation_point_c),
+        ));
+
+        let opening_challenge = ark_bls12_377::Fr::rand(&mut rng);
+
+        let batch_proof = ArkworksIPA::batch_open(
+            &pk,
+            &polynomials,
+            &commitments,
+            &query_set,
+            opening_challenge,
+            &new_rands,
+            None,
+        )
+        .unwrap();
+
+        let res = ArkworksIPA::batch_check(
+            &vk,
+            &commitments,
+            &query_set,
+            &evaluations,
+            &batch_proof,
+            opening_challenge,
+            &mut rng,
+        )
+        .unwrap();
 
         assert!(res)
     }
