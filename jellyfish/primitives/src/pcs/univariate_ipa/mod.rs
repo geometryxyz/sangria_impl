@@ -268,14 +268,28 @@ impl<E: CommitmentGroup> PolynomialCommitmentScheme<E> for UnivariateIPA<E> {
 
     // naive implementation, we verify each proof individually.
     fn batch_verify<R: RngCore + CryptoRng>(
-        _verifier_param: &Self::VerifierParam,
-        _multi_commitment: &Self::BatchCommitment,
-        _points: &[Self::Point],
-        _values: &[<E as CommitmentGroup>::Fr],
-        _batch_proof: &Self::BatchProof,
+        verifier_param: &Self::VerifierParam,
+        multi_commitment: &Self::BatchCommitment,
+        points: &[Self::Point],
+        values: &[<E as CommitmentGroup>::Fr],
+        batch_proof: &Self::BatchProof,
         _rng: &mut R,
     ) -> Result<bool, super::prelude::PCSError> {
-        todo!()
+        let mut batch_res = true;
+        for (((commitment, point), value), proof) in multi_commitment
+            .iter()
+            .zip(points.iter())
+            .zip(values.iter())
+            .zip(batch_proof.iter())
+        {
+            let res = Self::verify(verifier_param, commitment, point, value, proof)?;
+            if res == false {
+                batch_res = false;
+                return Ok(batch_res);
+            }
+        }
+
+        Ok(batch_res)
     }
 }
 
@@ -364,6 +378,55 @@ mod tests {
     }
 
     #[test]
+    fn test_batch_commit_and_open() {
+        let mut rng = test_rng();
+
+        let max_degree = 10;
+        let supported_degree = 8;
+
+        let crs = IPA::gen_srs_for_testing(&mut rng, max_degree).unwrap();
+
+        let (pk, vk) = IPA::trim(crs, supported_degree, None).unwrap();
+
+        let a = DensePolynomial::<ark_bls12_377::Fr>::rand(supported_degree, &mut rng);
+        let b = DensePolynomial::<ark_bls12_377::Fr>::rand(supported_degree, &mut rng);
+        let c = DensePolynomial::<ark_bls12_377::Fr>::rand(supported_degree, &mut rng);
+
+        let polynomials = vec![a, b, c];
+
+        let batch_commitment = IPA::batch_commit(&pk, &polynomials).unwrap();
+
+        let evaluation_point_a = ark_bls12_377::Fr::rand(&mut rng);
+        let evaluation_point_b = ark_bls12_377::Fr::rand(&mut rng);
+        let evaluation_point_c = ark_bls12_377::Fr::rand(&mut rng);
+        let evaluation_points = vec![evaluation_point_a, evaluation_point_b, evaluation_point_c];
+
+        let (batch_proof, evaluations) =
+            IPA::batch_open(&pk, &batch_commitment, &polynomials, &evaluation_points).unwrap();
+
+        let batch_res = IPA::batch_verify(
+            &vk,
+            &batch_commitment,
+            &evaluation_points,
+            &evaluations,
+            &batch_proof,
+            &mut rng,
+        )
+        .unwrap();
+
+        assert!(batch_res)
+    }
+
+    #[ignore]
+    #[test]
+    /**
+    Some notes (Nico):
+    Arkworks uses the `QuerySet`/`Evaluations` maps to keep track of which polynomial is evaluated at what point. We can
+    achieve a similar result by enforcing a strict ordering of polynomials and points.
+
+    On the other hand, Arkworks uses an opening challenge that must be provided by the verifier (interactive) or random oracle
+    (fiat-shamir). We can also achieve this by having our IPA work over a generic RandomOracle/Digest type.
+    */
     fn test_arkworks_batch() {
         let mut rng = test_rng();
 
@@ -387,7 +450,7 @@ mod tests {
 
         let (commitments, randomnesses) = ArkworksIPA::commit(&pk, &polynomials, None).unwrap();
 
-        let new_rands = vec![ipa_pc::Randomness::<ark_bls12_377::G1Affine>::empty(); 3];
+        let new_rands = vec![ipa_pc::Randomness::<ark_bls12_377::G1Affine>::empty(); 3]; // replace the randomness with empty randomness to make sure that we are not using hiding commitments,
 
         let evaluation_point_a = ark_bls12_377::Fr::rand(&mut rng);
         let evaluation_point_b = ark_bls12_377::Fr::rand(&mut rng);
