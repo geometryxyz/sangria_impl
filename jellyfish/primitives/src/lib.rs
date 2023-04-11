@@ -25,6 +25,7 @@ pub mod elgamal;
 pub mod errors;
 pub mod hash_to_group;
 pub mod merkle_tree;
+pub mod pasta;
 pub mod pcs;
 pub mod prf;
 pub mod rescue;
