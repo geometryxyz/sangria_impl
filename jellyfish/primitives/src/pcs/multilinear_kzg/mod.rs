@@ -314,6 +314,8 @@ impl<E: PairingEngine> PolynomialCommitmentScheme<E> for MultilinearKzgPCS<E> {
         batch_proof: &Self::BatchProof,
         _randomizers: I,
     ) -> Result<bool, PCSError> {
+        // TODO: the sampling of r from transcript does not
+        // use the randomizers.
         batch_verify_internal(
             &verifier_param.1,
             &verifier_param.0,
