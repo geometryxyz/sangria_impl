@@ -306,13 +306,13 @@ impl<E: PairingEngine> PolynomialCommitmentScheme<E> for MultilinearKzgPCS<E> {
     /// through the points
     /// 5. get a point `p := l(r)`
     /// 6. verifies `p` is verifies against proof
-    fn batch_verify<R: RngCore + CryptoRng>(
+    fn batch_verify<I: IntoIterator<Item = E::Fr>>(
         verifier_param: &Self::VerifierParam,
         batch_commitment: &Self::BatchCommitment,
         points: &[Self::Point],
         values: &[E::Fr],
         batch_proof: &Self::BatchProof,
-        _rng: &mut R,
+        _randomizers: I,
     ) -> Result<bool, PCSError> {
         batch_verify_internal(
             &verifier_param.1,

@@ -209,13 +209,13 @@ pub trait PolynomialCommitmentScheme<E: CommitmentGroup> {
 
     /// Verifies that `value_i` is the evaluation at `x_i` of the polynomial
     /// `poly_i` committed inside `comm`.
-    fn batch_verify<R: RngCore + CryptoRng>(
+    fn batch_verify<I: IntoIterator<Item = E::Fr>>(
         verifier_param: &Self::VerifierParam,
         multi_commitment: &Self::BatchCommitment,
         points: &[Self::Point],
         values: &[E::Fr],
         batch_proof: &Self::BatchProof,
-        rng: &mut R,
+        randomizers: I,
     ) -> Result<bool, PCSError>;
 }
 

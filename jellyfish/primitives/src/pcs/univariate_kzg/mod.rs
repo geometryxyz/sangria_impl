@@ -23,7 +23,7 @@ use ark_std::{
     string::ToString,
     vec,
     vec::Vec,
-    One, UniformRand, Zero,
+    One, Zero,
 };
 use jf_utils::multi_pairing;
 use jf_utils::par_utils::parallelizable_slice_iter;
@@ -233,13 +233,13 @@ impl<E: PairingEngine> PolynomialCommitmentScheme<E> for UnivariateKzgPCS<E> {
     // This is a naive approach
     // TODO: to implement the more efficient batch verification algorithm
     // (e.g., the appendix C.4 in https://eprint.iacr.org/2020/1536.pdf)
-    fn batch_verify<R: RngCore + CryptoRng>(
+    fn batch_verify<I: IntoIterator<Item = E::Fr>>(
         verifier_param: &Self::VerifierParam,
         multi_commitment: &Self::BatchCommitment,
         points: &[Self::Point],
         values: &[E::Fr],
         batch_proof: &Self::BatchProof,
-        rng: &mut R,
+        randomizers: I,
     ) -> Result<bool, PCSError> {
         let check_time =
             start_timer!(|| format!("Checking {} evaluation proofs", multi_commitment.len()));
@@ -252,6 +252,9 @@ impl<E: PairingEngine> PolynomialCommitmentScheme<E> for UnivariateKzgPCS<E> {
         // Instead of multiplying g and gamma_g in each turn, we simply accumulate
         // their coefficients and perform a final multiplication at the end.
         let mut g_multiplier = E::Fr::zero();
+
+        let mut randomizers_iter = randomizers.into_iter();
+
         for (((c, z), v), proof) in multi_commitment
             .iter()
             .zip(points)
@@ -265,10 +268,11 @@ impl<E: PairingEngine> PolynomialCommitmentScheme<E> for UnivariateKzgPCS<E> {
             g_multiplier += &(randomizer * v);
             total_c += &c.mul(randomizer.into_repr());
             total_w += &w.mul(randomizer.into_repr());
-            // We don't need to sample randomizers from the full field,
-            // only from 128-bit strings.
-            randomizer = u128::rand(rng).into();
+            randomizer = randomizers_iter.next().ok_or(PCSError::InvalidParameters(
+                "Insufficient randomizers provided".to_string(),
+            ))?;
         }
+
         total_c -= &verifier_param.g.mul(g_multiplier);
         end_timer!(combination_time);
 
@@ -369,7 +373,7 @@ mod tests {
     where
         E: PairingEngine,
     {
-        let rng = &mut test_rng();
+        let mut rng = &mut test_rng();
         for _ in 0..10 {
             let mut degree = 0;
             while degree <= 1 {
@@ -396,7 +400,14 @@ mod tests {
                 proofs.push(proof);
             }
             assert!(UnivariateKzgPCS::<E>::batch_verify(
-                &vk, &comms, &points, &values, &proofs, rng
+                &vk,
+                &comms,
+                &points,
+                &values,
+                &proofs,
+                // We don't need to sample randomizers from the full field,
+                // only from 128-bit strings.
+                std::iter::from_fn(|| { Some(u128::rand(&mut rng).into()) })
             )?);
         }
         Ok(())
