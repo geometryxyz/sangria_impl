@@ -10,12 +10,15 @@ mod batching;
 pub(crate) mod srs;
 pub(crate) mod util;
 
-use crate::pcs::{
-    prelude::{
-        Commitment, UnivariateProverParam, UnivariateUniversalParams, UnivariateVerifierParam,
+use crate::{
+    pcs::{
+        prelude::{
+            Commitment, UnivariateProverParam, UnivariateUniversalParams, UnivariateVerifierParam,
+        },
+        univariate_kzg::UnivariateKzgProof,
+        PCSError, PolynomialCommitmentScheme, StructuredReferenceString,
     },
-    univariate_kzg::UnivariateKzgProof,
-    PCSError, PolynomialCommitmentScheme, StructuredReferenceString,
+    scalars_n_bases::ScalarsAndBases,
 };
 use ark_ec::{
     msm::{FixedBaseMSM, VariableBaseMSM},
@@ -324,6 +327,19 @@ impl<E: PairingEngine> PolynomialCommitmentScheme<E> for MultilinearKzgPCS<E> {
             values,
             batch_proof,
         )
+    }
+
+    fn batch_verify_aggregated<I: IntoIterator<Item = E::Fr>, const ARITY: usize>(
+        _verifier_param: &Self::VerifierParam,
+        _multi_commitment: &[ScalarsAndBases<E>],
+        _points: [&[Self::Point]; ARITY],
+        _values: &[E::Fr],
+        _batch_proof: [&Self::BatchProof; ARITY],
+        _combiners: [&[E::Fr]; ARITY], // the combiners for the linear combination of the batch proofs
+        _randomizers: I,
+    ) -> Result<bool, PCSError> {
+        // TODO(fga): complete this!
+        unimplemented!()
     }
 }
 

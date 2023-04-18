@@ -6,9 +6,14 @@
 
 //! Main module for univariate KZG commitment scheme
 
-use crate::pcs::{
-    prelude::Commitment, CommitmentGroup, PCSError, PolynomialCommitmentScheme,
-    StructuredReferenceString,
+use core::iter;
+
+use crate::{
+    pcs::{
+        prelude::Commitment, CommitmentGroup, PCSError, PolynomialCommitmentScheme,
+        StructuredReferenceString,
+    },
+    scalars_n_bases::ScalarsAndBases,
 };
 use ark_ec::{msm::VariableBaseMSM, AffineCurve, PairingEngine, ProjectiveCurve};
 use ark_ff::PrimeField;
@@ -289,6 +294,76 @@ impl<E: PairingEngine> PolynomialCommitmentScheme<E> for UnivariateKzgPCS<E> {
         end_timer!(pairing_time);
         end_timer!(check_time, || format!("Result: {result}"));
         Ok(result)
+    }
+
+    fn batch_verify_aggregated<
+        I: IntoIterator<Item = <E as CommitmentGroup>::Fr>,
+        const ARITY: usize,
+    >(
+        verifier_param: &Self::VerifierParam,
+        multi_commitment: &[ScalarsAndBases<E>],
+        points: [&[Self::Point]; ARITY],
+        values: &[<E as CommitmentGroup>::Fr],
+        batch_proof: [&Self::BatchProof; ARITY],
+        combiners: [&[E::Fr]; ARITY],
+        randomizers: I,
+    ) -> Result<bool, PCSError> {
+        // in this particular case, we need randomizers to be materialized, so we can apply the same
+        // sequence of them for each pipeline. This is hackish.
+        let seq_len = values.len();
+        let randomizers: Vec<_> = iter::once(E::Fr::one()) // we continue the convention that the initial randomizer is 1
+            .chain(randomizers.into_iter().take(seq_len - 1))
+            .collect::<Vec<_>>();
+        // sanity-check on the result of `take`
+        if randomizers.len() != seq_len {
+            return Err(PCSError::InvalidParameters(
+                "Insufficient randomizers provided".to_string(),
+            ));
+        }
+
+        // We compute the pipelined variant of the term total_w
+        let mut inners = ScalarsAndBases::<E>::new();
+        // Note: the combiners all have to be provided explicitly (even if the first one is 1)
+        for i in 0..ARITY {
+            for ((proof, combiner), r) in batch_proof[i].iter().zip(combiners[i]).zip(&randomizers)
+            {
+                inners.push(*r * combiner, proof.proof);
+            }
+        }
+        let inner = inners.multi_scalar_mul();
+        let mut g1_elems = vec![inner.into()];
+        let mut g2_elems = vec![verifier_param.beta_h];
+
+        // We now compute the pipelined variant of the term total_c
+        let mut inners = ScalarsAndBases::<E>::new();
+
+        // the hardest part to generalize, this is the `temp.add_assign_mixed(&c.0)` term above
+        for (commitment, randomizer) in multi_commitment.iter().zip(&randomizers) {
+            inners.merge(*randomizer, commitment);
+        }
+
+        // this is the regular part of the `total_c` computation
+        let mut sum_evals = E::Fr::zero();
+        for i in 0..ARITY {
+            for (((point, proof), combiner), r) in points[i]
+                .iter()
+                .zip(batch_proof[i])
+                .zip(combiners[i])
+                .zip(&randomizers)
+            {
+                inners.push(*r * combiner * point, proof.proof);
+            }
+        }
+        for (value, r) in values.iter().zip(&randomizers) {
+            sum_evals += *value * r;
+        }
+        inners.push(-sum_evals, verifier_param.g);
+        let inner = inners.multi_scalar_mul();
+        // enf of total_c computation
+
+        g1_elems.push(-inner.into());
+        g2_elems.push(verifier_param.h);
+        Ok(multi_pairing::<E>(&g1_elems, &g2_elems) == E::Fqk::one())
     }
 }
 

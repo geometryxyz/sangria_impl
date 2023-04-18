@@ -28,6 +28,8 @@ use ark_std::{
 };
 use errors::PCSError;
 
+use crate::scalars_n_bases::ScalarsAndBases;
+
 use self::prelude::Commitment;
 
 /// A more restricted variant of the `PolynomialCommitmentScheme` trait
@@ -217,6 +219,19 @@ pub trait PolynomialCommitmentScheme<E: CommitmentGroup> {
         points: &[Self::Point],
         values: &[E::Fr],
         batch_proof: &Self::BatchProof,
+        randomizers: I,
+    ) -> Result<bool, PCSError>;
+
+    /// Verifies that a pipelined set of batch proofs is valid.
+    /// A "pipelined" set of batch proofs is a set of batch proof expressed in the form of a
+    /// sequence of batch proofs.
+    fn batch_verify_aggregated<I: IntoIterator<Item = E::Fr>, const ARITY: usize>(
+        verifier_param: &Self::VerifierParam,
+        multi_commitment: &[ScalarsAndBases<E>],
+        points: [&[Self::Point]; ARITY],
+        values: &[E::Fr],
+        batch_proof: [&Self::BatchProof; ARITY],
+        combiners: [&[E::Fr]; ARITY], // the combiners for the linear combination of the batch proofs
         randomizers: I,
     ) -> Result<bool, PCSError>;
 }
