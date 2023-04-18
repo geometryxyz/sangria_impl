@@ -301,7 +301,7 @@ impl<G: AffineCurve> WithMaxDegree for ipa_pc::UniversalParams<G> {
 
 #[cfg(test)]
 #[allow(unused)]
-mod tests {
+mod test_arkworks_comparison {
     use std::println;
 
     use ark_bls12_377::Bls12_377;
@@ -508,5 +508,63 @@ mod tests {
         .unwrap();
 
         assert!(res)
+    }
+}
+
+#[cfg(test)]
+mod test_pasta_commitments {
+
+    use ark_ff::UniformRand;
+    use ark_poly::{univariate::DensePolynomial, UVPolynomial};
+    use ark_std::{test_rng, vec};
+
+    use crate::{
+        pasta::PallasGroup,
+        pcs::{CommitmentGroup, PolynomialCommitmentScheme},
+    };
+
+    use super::UnivariateIPA;
+
+    type E = PallasGroup;
+    type IPA = UnivariateIPA<E>;
+
+    #[test]
+    fn test_batch_commit_and_open() {
+        let mut rng = test_rng();
+
+        let max_degree = 10;
+        let supported_degree = 8;
+
+        let crs = IPA::gen_srs_for_testing(&mut rng, max_degree).unwrap();
+
+        let (pk, vk) = IPA::trim(crs, supported_degree, None).unwrap();
+
+        let a = DensePolynomial::<<E as CommitmentGroup>::Fr>::rand(supported_degree, &mut rng);
+        let b = DensePolynomial::<<E as CommitmentGroup>::Fr>::rand(supported_degree, &mut rng);
+        let c = DensePolynomial::<<E as CommitmentGroup>::Fr>::rand(supported_degree, &mut rng);
+
+        let polynomials = vec![a, b, c];
+
+        let batch_commitment = IPA::batch_commit(&pk, &polynomials).unwrap();
+
+        let evaluation_point_a = <<E as CommitmentGroup>::Fr>::rand(&mut rng);
+        let evaluation_point_b = <<E as CommitmentGroup>::Fr>::rand(&mut rng);
+        let evaluation_point_c = <<E as CommitmentGroup>::Fr>::rand(&mut rng);
+        let evaluation_points = vec![evaluation_point_a, evaluation_point_b, evaluation_point_c];
+
+        let (batch_proof, evaluations) =
+            IPA::batch_open(&pk, &batch_commitment, &polynomials, &evaluation_points).unwrap();
+
+        let batch_res = IPA::batch_verify(
+            &vk,
+            &batch_commitment,
+            &evaluation_points,
+            &evaluations,
+            &batch_proof,
+            &mut rng,
+        )
+        .unwrap();
+
+        assert!(batch_res)
     }
 }
