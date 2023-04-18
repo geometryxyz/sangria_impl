@@ -25,6 +25,7 @@ use ark_std::{
     vec::Vec,
     One, UniformRand, Zero,
 };
+use jf_utils::multi_pairing;
 use jf_utils::par_utils::parallelizable_slice_iter;
 #[cfg(feature = "parallel")]
 use rayon::prelude::*;
@@ -273,14 +274,13 @@ impl<E: PairingEngine> PolynomialCommitmentScheme<E> for UnivariateKzgPCS<E> {
 
         let to_affine_time = start_timer!(|| "Converting results to affine for pairing");
         let affine_points = E::G1Projective::batch_normalization_into_affine(&[-total_w, total_c]);
-        let (total_w, total_c) = (affine_points[0], affine_points[1]);
         end_timer!(to_affine_time);
 
         let pairing_time = start_timer!(|| "Performing product of pairings");
-        let result = E::product_of_pairings(&[
-            (total_w.into(), verifier_param.beta_h.into()),
-            (total_c.into(), verifier_param.h.into()),
-        ])
+        let result = multi_pairing::<E>(
+            &affine_points[..],
+            &[verifier_param.beta_h, verifier_param.h],
+        )
         .is_one();
         end_timer!(pairing_time);
         end_timer!(check_time, || format!("Result: {result}"));
