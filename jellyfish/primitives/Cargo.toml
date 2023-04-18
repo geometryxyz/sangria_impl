@@ -19,9 +19,11 @@ ark-ed-on-bn254 = "0.3.0"
 ark-ff = "0.3.0"
 ark-pallas = "0.3.0"
 ark-poly = "0.3.0"
+ark-poly-commit = "0.3.0"
 ark-serialize = "0.3.0"
 ark-sponge = "0.3.0"
 ark-std = { version = "0.3.0", default-features = false }
+blake2 = { version = "0.9", default-features = false }
 ark-vesta = "0.3.0"
 blst = "0.3.10"
 crypto_box = "0.8.1"
