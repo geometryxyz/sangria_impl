@@ -10,7 +10,7 @@ use super::structs::{
 use crate::{
     constants::*,
     errors::{PlonkError, SnarkError::ParameterError},
-    proof_system::structs::{eval_merged_lookup_witness, eval_merged_table, OpenKey},
+    proof_system::structs::{eval_merged_lookup_witness, eval_merged_table},
     transcript::*,
 };
 use ark_ec::{short_weierstrass_jacobian::GroupAffine, PairingEngine, SWModelParameters};
@@ -209,7 +209,7 @@ where
         T,
         S: UVPCS<E, VerifierParam = UnivariateVerifierParam<E>>,
     >(
-        open_key: &OpenKey<E, S>,
+        open_key: &S::VerifierParam,
         pcs_infos: &[PcsInfo<E>],
     ) -> Result<bool, PlonkError>
     where
