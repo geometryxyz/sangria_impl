@@ -39,6 +39,7 @@ pub trait UVPCS<E: CommitmentGroup>:
         Polynomial = DensePolynomial<<E as CommitmentGroup>::Fr>,
         Commitment = Commitment<E>,
         BatchCommitment = Vec<Commitment<E>>,
+        BatchProof = Vec<<Self as PolynomialCommitmentScheme<E>>::Proof>,
     > + Sync
 {
 }
@@ -50,6 +51,7 @@ impl<
                 Polynomial = DensePolynomial<<E as CommitmentGroup>::Fr>,
                 Commitment = Commitment<E>,
                 BatchCommitment = Vec<Commitment<E>>,
+                BatchProof = Vec<<Self as PolynomialCommitmentScheme<E>>::Proof>,
             > + Sync,
     > UVPCS<E> for S
 {
