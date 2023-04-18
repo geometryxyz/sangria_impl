@@ -29,6 +29,7 @@ pub mod pasta;
 pub mod pcs;
 pub mod prf;
 pub mod rescue;
+pub mod scalars_n_bases;
 pub mod signatures;
 pub mod vrf;
 

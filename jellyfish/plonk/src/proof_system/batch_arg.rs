@@ -8,7 +8,7 @@
 use crate::{
     errors::{PlonkError, SnarkError::ParameterError},
     proof_system::{
-        structs::{BatchProof, OpenKey, ProvingKey, ScalarsAndBases, UniversalSrs, VerifyingKey},
+        structs::{BatchProof, OpenKey, ProvingKey, UniversalSrs, VerifyingKey},
         verifier::Verifier,
         PlonkKzgSnark, UniversalSNARK,
     },
@@ -27,6 +27,7 @@ use ark_std::{
 use jf_primitives::{
     pcs::{prelude::UnivariateVerifierParam, CommitmentGroup, PolynomialCommitmentScheme, UVPCS},
     rescue::RescueParameter,
+    scalars_n_bases::ScalarsAndBases,
 };
 use jf_relation::{gadgets::ecc::SWToTEConParam, Circuit, MergeableCircuitType, PlonkCircuit};
 use jf_utils::multi_pairing;

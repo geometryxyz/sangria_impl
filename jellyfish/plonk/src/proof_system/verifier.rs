@@ -5,7 +5,7 @@
 // along with the Jellyfish library. If not, see <https://mit-license.org/>.
 
 use super::structs::{
-    BatchProof, Challenges, PlookupProof, ProofEvaluations, ScalarsAndBases, VerifyingKey,
+    BatchProof, Challenges, PlookupProof, ProofEvaluations, VerifyingKey,
 };
 use crate::{
     constants::*,
@@ -24,6 +24,7 @@ use jf_primitives::{
         CommitmentGroup, PolynomialCommitmentScheme, UVPCS,
     },
     rescue::RescueParameter,
+    scalars_n_bases::ScalarsAndBases,
 };
 use jf_relation::{constants::GATE_WIDTH, gadgets::ecc::SWToTEConParam};
 use jf_utils::multi_pairing;

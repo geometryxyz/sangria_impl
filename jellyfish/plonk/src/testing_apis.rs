@@ -27,6 +27,7 @@ use hashbrown::HashMap;
 use jf_primitives::{
     pcs::{prelude::Commitment, CommitmentGroup, PolynomialCommitmentScheme},
     rescue::RescueParameter,
+    scalars_n_bases,
 };
 use jf_relation::gadgets::ecc::SWToTEConParam;
 
@@ -76,15 +77,15 @@ pub struct ScalarsAndBases<E: CommitmentGroup> {
     pub base_scalar_map: HashMap<E::G1Affine, E::Fr>,
 }
 
-impl<E: CommitmentGroup> From<structs::ScalarsAndBases<E>> for ScalarsAndBases<E> {
-    fn from(other: structs::ScalarsAndBases<E>) -> Self {
+impl<E: CommitmentGroup> From<scalars_n_bases::ScalarsAndBases<E>> for ScalarsAndBases<E> {
+    fn from(other: scalars_n_bases::ScalarsAndBases<E>) -> Self {
         Self {
             base_scalar_map: other.base_scalar_map,
         }
     }
 }
 
-impl<E: CommitmentGroup> From<ScalarsAndBases<E>> for structs::ScalarsAndBases<E> {
+impl<E: CommitmentGroup> From<ScalarsAndBases<E>> for scalars_n_bases::ScalarsAndBases<E> {
     fn from(other: ScalarsAndBases<E>) -> Self {
         Self {
             base_scalar_map: other.base_scalar_map,
@@ -95,7 +96,7 @@ impl<E: CommitmentGroup> From<ScalarsAndBases<E>> for structs::ScalarsAndBases<E
 impl<E: CommitmentGroup> ScalarsAndBases<E> {
     /// Compute the multi-scalar multiplication.
     pub fn multi_scalar_mul(&self) -> E::G1Projective {
-        let tmp: structs::ScalarsAndBases<E> = self.clone().into();
+        let tmp: scalars_n_bases::ScalarsAndBases<E> = self.clone().into();
         tmp.multi_scalar_mul()
     }
 }
