@@ -20,7 +20,7 @@ use crate::{
     proof_system::structs::UniversalSrs,
     transcript::*,
 };
-use ark_ec::{short_weierstrass_jacobian::GroupAffine, PairingEngine, SWModelParameters};
+use ark_ec::{short_weierstrass_jacobian::GroupAffine, SWModelParameters};
 use ark_ff::{Field, One};
 use ark_std::{
     format,
@@ -32,7 +32,7 @@ use ark_std::{
 };
 use jf_primitives::{
     pcs::PolynomialCommitmentScheme,
-    pcs::{prelude::UnivariateVerifierParam, CommitmentGroup, WithMaxDegree, UVPCS},
+    pcs::{CommitmentGroup, WithMaxDegree, UVPCS},
     rescue::RescueParameter,
 };
 use jf_relation::{
@@ -342,10 +342,10 @@ where
 }
 impl<E, F, P, S> PlonkKzgSnark<E, S>
 where
-    E: PairingEngine<Fq = F, G1Affine = GroupAffine<P>>,
+    E: CommitmentGroup<Fq = F, G1Affine = GroupAffine<P>>,
     F: RescueParameter + SWToTEConParam,
     P: SWModelParameters<BaseField = F>,
-    S: UVPCS<E, VerifierParam = UnivariateVerifierParam<E>>,
+    S: UVPCS<E>,
 {
     /// Verify a single aggregated Plonk proof.
     pub fn verify_batch_proof<T>(
@@ -428,11 +428,11 @@ where
 
 impl<E, F, P, S> UniversalSNARK<E> for PlonkKzgSnark<E, S>
 where
-    E: PairingEngine<Fq = F, G1Affine = GroupAffine<P>>,
+    E: CommitmentGroup<Fq = F, G1Affine = GroupAffine<P>>,
 
     F: RescueParameter + SWToTEConParam,
     P: SWModelParameters<BaseField = F>,
-    S: UVPCS<E, VerifierParam = UnivariateVerifierParam<E>>,
+    S: UVPCS<E>,
 {
     type Proof = Proof<E>;
     type ProvingKey = ProvingKey<E, S>;

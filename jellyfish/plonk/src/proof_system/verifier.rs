@@ -184,13 +184,7 @@ where
             shifted_opening_proof: batch_proof.shifted_opening_proof,
         })
     }
-}
-impl<E, F, P> Verifier<E>
-where
-    E: CommitmentGroup<Fq = F, G1Affine = GroupAffine<P>>,
-    F: RescueParameter + SWToTEConParam,
-    P: SWModelParameters<BaseField = F>,
-{
+
     /// Batchly verify multiple (aggregated) PCS opening proofs.
     ///
     /// We need to verify that
@@ -284,14 +278,7 @@ where
         )
         .map_err(|e| PlonkError::PCSError(e))
     }
-}
 
-impl<E, F, P> Verifier<E>
-where
-    E: CommitmentGroup<Fq = F, G1Affine = GroupAffine<P>>,
-    F: RescueParameter + SWToTEConParam,
-    P: SWModelParameters<BaseField = F>,
-{
     /// Compute verifier challenges `tau`, `beta`, `gamma`, `alpha`, `zeta`,
     /// 'v', 'u'.
     #[inline]
