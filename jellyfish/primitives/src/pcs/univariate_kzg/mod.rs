@@ -51,8 +51,15 @@ pub struct UnivariateKzgProof<E: CommitmentGroup> {
     /// Evaluation of quotients
     pub proof: E::G1Affine,
 }
+
 /// batch proof
 pub type UnivariateKzgBatchProof<E> = Vec<UnivariateKzgProof<E>>;
+
+impl<E: PairingEngine> From<Commitment<E>> for UnivariateKzgProof<E> {
+    fn from(c: Commitment<E>) -> UnivariateKzgProof<E> {
+        UnivariateKzgProof { proof: c.0 }
+    }
+}
 
 impl<E: PairingEngine> PolynomialCommitmentScheme<E> for UnivariateKzgPCS<E> {
     // Parameters

@@ -1,12 +1,13 @@
 //! A vector representation of bases and corresponding scalars
 use crate::pcs::CommitmentGroup;
 use ark_ec::msm::VariableBaseMSM;
+use ark_ff::vec::Vec;
 use ark_ff::PrimeField;
 use ark_std::Zero;
 use hashbrown::HashMap;
 
 /// The vector representation of bases and corresponding scalars.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ScalarsAndBases<E: CommitmentGroup> {
     /// The scalars and bases collection
     pub base_scalar_map: HashMap<E::G1Affine, E::Fr>,
@@ -34,12 +35,11 @@ impl<E: CommitmentGroup> ScalarsAndBases<E> {
     }
     /// Compute the multi-scalar multiplication.
     pub fn multi_scalar_mul(&self) -> E::G1Projective {
-        let mut bases = vec![];
-        let mut scalars = vec![];
-        for (base, scalar) in &self.base_scalar_map {
-            bases.push(*base);
-            scalars.push(scalar.into_repr());
-        }
+        let (bases, scalars): (Vec<_>, Vec<_>) = self
+            .base_scalar_map
+            .iter()
+            .map(|(base, scalar)| (*base, scalar.into_repr()))
+            .unzip();
         VariableBaseMSM::multi_scalar_mul(&bases, &scalars)
     }
 }

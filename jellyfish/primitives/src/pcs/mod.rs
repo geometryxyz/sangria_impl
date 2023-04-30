@@ -33,30 +33,41 @@ use crate::scalars_n_bases::ScalarsAndBases;
 use self::prelude::Commitment;
 
 /// A more restricted variant of the `PolynomialCommitmentScheme` trait
-// TODO(fga): this should be resolved by https://github.com/rust-lang/rust/issues/41517
+// TODO(fga): this should be simplified by https://github.com/rust-lang/rust/issues/41517
 // type UVPCS<E> = PolynomialCommitmentScheme<E, Polynomial = DensePolynomial<E::Fr>, Commitment = Commitment<E>>;
 pub trait UVPCS<E: CommitmentGroup>:
     PolynomialCommitmentScheme<
         E,
         Polynomial = DensePolynomial<<E as CommitmentGroup>::Fr>,
+        Point = E::Fr,
+        Evaluation = E::Fr,
         Commitment = Commitment<E>,
         BatchCommitment = Vec<Commitment<E>>,
         BatchProof = Vec<<Self as PolynomialCommitmentScheme<E>>::Proof>,
     > + Sync
 {
+    /// How to convert a commitment to the univariate PCS's proof
+    fn from_comm(c: Commitment<E>) -> Self::Proof;
 }
 
 impl<
         E: CommitmentGroup,
         S: PolynomialCommitmentScheme<
                 E,
+                Point = E::Fr,
+                Evaluation = E::Fr,
                 Polynomial = DensePolynomial<<E as CommitmentGroup>::Fr>,
                 Commitment = Commitment<E>,
                 BatchCommitment = Vec<Commitment<E>>,
                 BatchProof = Vec<<Self as PolynomialCommitmentScheme<E>>::Proof>,
             > + Sync,
     > UVPCS<E> for S
+where
+    S::Proof: From<Commitment<E>>,
 {
+    fn from_comm(c: Commitment<E>) -> Self::Proof {
+        c.into()
+    }
 }
 
 /// This trait defines the common APIs for a commitment group.
