@@ -8,7 +8,7 @@
 use crate::{
     errors::{PlonkError, SnarkError::ParameterError},
     proof_system::{
-        structs::{BatchProof, OpenKey, ProvingKey, ScalarsAndBases, UniversalSrs, VerifyingKey},
+        structs::{BatchProof, OpenKey, ProvingKey, UniversalSrs, VerifyingKey},
         verifier::Verifier,
         PlonkKzgSnark, UniversalSNARK,
     },
@@ -27,6 +27,7 @@ use ark_std::{
 use jf_primitives::{
     pcs::{prelude::UnivariateVerifierParam, CommitmentGroup, PolynomialCommitmentScheme, UVPCS},
     rescue::RescueParameter,
+    scalars_n_bases::ScalarsAndBases,
 };
 use jf_relation::{gadgets::ecc::SWToTEConParam, Circuit, MergeableCircuitType, PlonkCircuit};
 use jf_utils::multi_pairing;
@@ -169,12 +170,12 @@ where
 
 impl<E, F, P> BatchArgument<E>
 where
-    E: PairingEngine<Fq = F, G1Affine = GroupAffine<P>>,
+    E: CommitmentGroup<Fq = F, G1Affine = GroupAffine<P>>,
     F: RescueParameter + SWToTEConParam,
     P: SWModelParameters<BaseField = F>,
 {
     /// Setup the circuit and the proving key for a (mergeable) instance.
-    pub fn setup_instance<S: UVPCS<E, VerifierParam = UnivariateVerifierParam<E>>>(
+    pub fn setup_instance<S: UVPCS<E>>(
         srs: &UniversalSrs<E, S>,
         mut circuit: PlonkCircuit<E::Fr>,
         circuit_type: MergeableCircuitType,
@@ -269,11 +270,11 @@ pub fn build_batch_proof_and_vks_for_test<E, F, P, R, S, T>(
     PlonkError,
 >
 where
-    E: PairingEngine<Fq = F, G1Affine = GroupAffine<P>>,
+    E: CommitmentGroup<Fq = F, G1Affine = GroupAffine<P>>,
     F: RescueParameter + SWToTEConParam,
     P: SWModelParameters<BaseField = F>,
     R: CryptoRng + RngCore,
-    S: UVPCS<E, VerifierParam = UnivariateVerifierParam<E>>,
+    S: UVPCS<E>,
     T: PlonkTranscript<F>,
 {
     let mut instances_type_a = vec![];

@@ -4,29 +4,24 @@
 // You should have received a copy of the MIT License
 // along with the Jellyfish library. If not, see <https://mit-license.org/>.
 
-use super::structs::{
-    BatchProof, Challenges, PlookupProof, ProofEvaluations, ScalarsAndBases, VerifyingKey,
-};
+use super::structs::{BatchProof, Challenges, PlookupProof, ProofEvaluations, VerifyingKey};
 use crate::{
     constants::*,
     errors::{PlonkError, SnarkError::ParameterError},
-    proof_system::structs::{eval_merged_lookup_witness, eval_merged_table, OpenKey},
+    proof_system::structs::{eval_merged_lookup_witness, eval_merged_table},
     transcript::*,
 };
-use ark_ec::{short_weierstrass_jacobian::GroupAffine, PairingEngine, SWModelParameters};
+use ark_ec::{short_weierstrass_jacobian::GroupAffine, SWModelParameters};
 use ark_ff::{Field, One, Zero};
 use ark_poly::{EvaluationDomain, Radix2EvaluationDomain};
 use ark_std::{format, vec, vec::Vec};
 use core::ops::Neg;
 use jf_primitives::{
-    pcs::{
-        prelude::{Commitment, UnivariateVerifierParam},
-        CommitmentGroup, PolynomialCommitmentScheme, UVPCS,
-    },
+    pcs::{prelude::Commitment, CommitmentGroup, PolynomialCommitmentScheme, UVPCS},
     rescue::RescueParameter,
+    scalars_n_bases::ScalarsAndBases,
 };
 use jf_relation::{constants::GATE_WIDTH, gadgets::ecc::SWToTEConParam};
-use jf_utils::multi_pairing;
 
 /// (Aggregated) polynomial commitment evaluation info.
 /// * `u` - a random combiner that was used to combine evaluations at point
@@ -189,13 +184,7 @@ where
             shifted_opening_proof: batch_proof.shifted_opening_proof,
         })
     }
-}
-impl<E, F, P> Verifier<E>
-where
-    E: PairingEngine<Fq = F, G1Affine = GroupAffine<P>>,
-    F: RescueParameter + SWToTEConParam,
-    P: SWModelParameters<BaseField = F>,
-{
+
     /// Batchly verify multiple (aggregated) PCS opening proofs.
     ///
     /// We need to verify that
@@ -205,11 +194,8 @@ where
     ///   [shifted_open_proof_i] + comm_i - eval_i * [1]1`.
     /// By Schwartz-Zippel lemma, it's equivalent to check that for a random r:
     /// - `e(A0 + ... + r^{m-1} * Am, [x]2) = e(B0 + ... + r^{m-1} * Bm, [1]2)`.
-    pub(crate) fn batch_verify_opening_proofs<
-        T,
-        S: UVPCS<E, VerifierParam = UnivariateVerifierParam<E>>,
-    >(
-        open_key: &OpenKey<E, S>,
+    pub(crate) fn batch_verify_opening_proofs<T, S: UVPCS<E>>(
+        open_key: &S::VerifierParam,
         pcs_infos: &[PcsInfo<E>],
     ) -> Result<bool, PlonkError>
     where
@@ -230,49 +216,69 @@ where
             transcript.get_and_append_challenge::<E>(b"r")?
         };
 
-        // Compute A := A0 + r * A1 + ... + r^{m-1} * Am
-        let mut inners = ScalarsAndBases::<E>::new();
-        let mut r_base = E::Fr::one();
-        for pcs_info in pcs_infos.iter() {
-            inners.push(r_base, pcs_info.opening_proof.0);
-            inners.push(r_base * pcs_info.u, pcs_info.shifted_opening_proof.0);
-            r_base *= r;
-        }
-        let inner = inners.multi_scalar_mul();
-        // Add (A, [x]2) to the product pairing list
-        let mut g1_elems: Vec<<E as PairingEngine>::G1Affine> = vec![inner.into()];
-        let mut g2_elems = vec![open_key.beta_h];
+        let seq_len = pcs_infos.len();
+        let randomizers = (0..seq_len).scan(E::Fr::one(), |acc, _| {
+            let rand_i = *acc;
+            *acc *= r;
+            Some(rand_i)
+        });
 
-        // Compute B := B0 + r * B1 + ... + r^{m-1} * Bm
-        let mut inners = ScalarsAndBases::new();
-        let mut r_base = E::Fr::one();
-        let mut sum_evals = E::Fr::zero();
-        for pcs_info in pcs_infos.iter() {
-            inners.merge(r_base, &pcs_info.comm_scalars_and_bases);
-            inners.push(r_base * pcs_info.eval_point, pcs_info.opening_proof.0);
-            inners.push(
-                r_base * pcs_info.u * pcs_info.next_eval_point,
-                pcs_info.shifted_opening_proof.0,
-            );
-            sum_evals += r_base * pcs_info.eval;
-            r_base *= r;
-        }
-        inners.push(-sum_evals, open_key.g);
-        let inner = inners.multi_scalar_mul();
-        // Add (-B, [1]2) to the product pairing list
-        g1_elems.push(-inner.into());
-        g2_elems.push(open_key.h);
-        // Check e(A, [x]2) ?= e(B, [1]2)
-        Ok(multi_pairing::<E>(&g1_elems, &g2_elems) == E::Fqk::one())
+        // we transpose the row-based logic of pcs_infos into the column-based logic of
+        // the batch_verify_aggregated function
+        let (
+            (((((combiners_for_shift, values), commitments), proofs), shifted_proofs), eval_points),
+            shifted_eval_points,
+        ): (
+            (
+                (
+                    (
+                        ((Vec<E::Fr>, Vec<E::Fr>), Vec<ScalarsAndBases<E>>),
+                        Vec<Commitment<E>>,
+                    ),
+                    Vec<Commitment<E>>,
+                ),
+                Vec<E::Fr>,
+            ),
+            Vec<E::Fr>,
+        ) = pcs_infos
+            .iter()
+            .map(|pcs_info| {
+                let combiner = pcs_info.u;
+                let value = pcs_info.eval;
+                let commitments = pcs_info.comm_scalars_and_bases.clone(); // TODO: avoid clone
+                (
+                    (
+                        (
+                            (((combiner, value), commitments), pcs_info.opening_proof),
+                            pcs_info.shifted_opening_proof,
+                        ),
+                        pcs_info.eval_point,
+                    ),
+                    pcs_info.next_eval_point,
+                )
+            })
+            .unzip();
+
+        let base_combiners = vec![E::Fr::one(); seq_len];
+
+        let pcs_proofs: Vec<S::Proof> = proofs.into_iter().map(|p| S::from_comm(p)).collect();
+        let shifted_pcs_proofs: Vec<S::Proof> = shifted_proofs
+            .into_iter()
+            .map(|p| S::from_comm(p))
+            .collect();
+
+        S::batch_verify_aggregated(
+            open_key,
+            &commitments,
+            [&eval_points[..], &shifted_eval_points],
+            &values,
+            [&pcs_proofs, &shifted_pcs_proofs],
+            [&base_combiners, &combiners_for_shift],
+            randomizers,
+        )
+        .map_err(|e| PlonkError::PCSError(e))
     }
-}
 
-impl<E, F, P> Verifier<E>
-where
-    E: CommitmentGroup<Fq = F, G1Affine = GroupAffine<P>>,
-    F: RescueParameter + SWToTEConParam,
-    P: SWModelParameters<BaseField = F>,
-{
     /// Compute verifier challenges `tau`, `beta`, `gamma`, `alpha`, `zeta`,
     /// 'v', 'u'.
     #[inline]

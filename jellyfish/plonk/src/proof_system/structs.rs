@@ -12,10 +12,8 @@ use crate::{
         SnarkError::{self, ParameterError, SnarkLookupUnsupported},
     },
 };
-use ark_ec::{
-    msm::VariableBaseMSM, short_weierstrass_jacobian::GroupAffine, PairingEngine, SWModelParameters,
-};
-use ark_ff::{FftField, Field, Fp2, Fp2Parameters, PrimeField, Zero};
+use ark_ec::{short_weierstrass_jacobian::GroupAffine, PairingEngine, SWModelParameters};
+use ark_ff::{FftField, Field, Fp2, Fp2Parameters, PrimeField};
 use ark_poly::univariate::DensePolynomial;
 use ark_serialize::*;
 use ark_std::{
@@ -26,7 +24,6 @@ use ark_std::{
     vec::Vec,
 };
 use espresso_systems_common::jellyfish::tag;
-use hashbrown::HashMap;
 use jf_primitives::{
     pcs::{
         prelude::{Commitment, UnivariateVerifierParam},
@@ -894,43 +891,6 @@ pub(crate) struct Oracles<F: FftField> {
 pub(crate) struct PlookupOracles<F: FftField> {
     pub(crate) h_polys: Vec<DensePolynomial<F>>,
     pub(crate) prod_lookup_poly: DensePolynomial<F>,
-}
-
-/// The vector representation of bases and corresponding scalars.
-#[derive(Debug)]
-pub(crate) struct ScalarsAndBases<E: CommitmentGroup> {
-    pub(crate) base_scalar_map: HashMap<E::G1Affine, E::Fr>,
-}
-
-impl<E: CommitmentGroup> ScalarsAndBases<E> {
-    pub(crate) fn new() -> Self {
-        Self {
-            base_scalar_map: HashMap::new(),
-        }
-    }
-    /// Insert a base point and the corresponding scalar.
-    pub(crate) fn push(&mut self, scalar: E::Fr, base: E::G1Affine) {
-        let entry_scalar = self.base_scalar_map.entry(base).or_insert_with(E::Fr::zero);
-        *entry_scalar += scalar;
-    }
-
-    /// Add a list of scalars and bases into self, where each scalar is
-    /// multiplied by a constant c.
-    pub(crate) fn merge(&mut self, c: E::Fr, scalars_and_bases: &Self) {
-        for (base, scalar) in &scalars_and_bases.base_scalar_map {
-            self.push(c * scalar, *base);
-        }
-    }
-    /// Compute the multi-scalar multiplication.
-    pub(crate) fn multi_scalar_mul(&self) -> E::G1Projective {
-        let mut bases = vec![];
-        let mut scalars = vec![];
-        for (base, scalar) in &self.base_scalar_map {
-            bases.push(*base);
-            scalars.push(scalar.into_repr());
-        }
-        VariableBaseMSM::multi_scalar_mul(&bases, &scalars)
-    }
 }
 
 // Utility function for computing merged table evaluations.

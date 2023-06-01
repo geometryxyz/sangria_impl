@@ -15,6 +15,8 @@ use ark_std::{
 use blake2::Blake2s;
 use jf_utils::Vec;
 
+use crate::scalars_n_bases::ScalarsAndBases;
+
 use super::{prelude::PCSError, CommitmentGroup, PolynomialCommitmentScheme, WithMaxDegree};
 
 type ArkworksIPA<G> =
@@ -267,13 +269,13 @@ impl<E: CommitmentGroup> PolynomialCommitmentScheme<E> for UnivariateIPA<E> {
     }
 
     // naive implementation, we verify each proof individually.
-    fn batch_verify<R: RngCore + CryptoRng>(
+    fn batch_verify<I: IntoIterator<Item = E::Fr>>(
         verifier_param: &Self::VerifierParam,
         multi_commitment: &Self::BatchCommitment,
         points: &[Self::Point],
         values: &[<E as CommitmentGroup>::Fr],
         batch_proof: &Self::BatchProof,
-        _rng: &mut R,
+        _randomizers: I,
     ) -> Result<bool, super::prelude::PCSError> {
         let mut batch_res = true;
         for (((commitment, point), value), proof) in multi_commitment
@@ -290,6 +292,18 @@ impl<E: CommitmentGroup> PolynomialCommitmentScheme<E> for UnivariateIPA<E> {
         }
 
         Ok(batch_res)
+    }
+
+    fn batch_verify_aggregated<I: IntoIterator<Item = E::Fr>, const ARITY: usize>(
+        _verifier_param: &Self::VerifierParam,
+        _multi_commitment: &[ScalarsAndBases<E>],
+        _points: [&[Self::Point]; ARITY],
+        _values: &[E::Fr],
+        _batch_proof: [&Self::BatchProof; ARITY],
+        _combiners: [&[E::Fr]; ARITY], // the combiners for the linear combination of the batch proofs
+        _randomizers: I,
+    ) -> Result<bool, PCSError> {
+        unimplemented!()
     }
 }
 
@@ -410,7 +424,7 @@ mod test_arkworks_comparison {
             &evaluation_points,
             &evaluations,
             &batch_proof,
-            &mut rng,
+            std::iter::from_fn(|| Some(u128::rand(&mut rng).into())),
         )
         .unwrap();
 
@@ -561,7 +575,7 @@ mod test_pasta_commitments {
             &evaluation_points,
             &evaluations,
             &batch_proof,
-            &mut rng,
+            std::iter::from_fn(|| Some(u128::rand(&mut rng).into())),
         )
         .unwrap();
 

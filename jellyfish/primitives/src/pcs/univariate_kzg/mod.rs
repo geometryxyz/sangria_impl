@@ -6,9 +6,14 @@
 
 //! Main module for univariate KZG commitment scheme
 
-use crate::pcs::{
-    prelude::Commitment, CommitmentGroup, PCSError, PolynomialCommitmentScheme,
-    StructuredReferenceString,
+use core::iter;
+
+use crate::{
+    pcs::{
+        prelude::Commitment, CommitmentGroup, PCSError, PolynomialCommitmentScheme,
+        StructuredReferenceString,
+    },
+    scalars_n_bases::ScalarsAndBases,
 };
 use ark_ec::{msm::VariableBaseMSM, AffineCurve, PairingEngine, ProjectiveCurve};
 use ark_ff::PrimeField;
@@ -23,8 +28,9 @@ use ark_std::{
     string::ToString,
     vec,
     vec::Vec,
-    One, UniformRand, Zero,
+    One, Zero,
 };
+use jf_utils::multi_pairing;
 use jf_utils::par_utils::parallelizable_slice_iter;
 #[cfg(feature = "parallel")]
 use rayon::prelude::*;
@@ -45,8 +51,15 @@ pub struct UnivariateKzgProof<E: CommitmentGroup> {
     /// Evaluation of quotients
     pub proof: E::G1Affine,
 }
+
 /// batch proof
 pub type UnivariateKzgBatchProof<E> = Vec<UnivariateKzgProof<E>>;
+
+impl<E: PairingEngine> From<Commitment<E>> for UnivariateKzgProof<E> {
+    fn from(c: Commitment<E>) -> UnivariateKzgProof<E> {
+        UnivariateKzgProof { proof: c.0 }
+    }
+}
 
 impl<E: PairingEngine> PolynomialCommitmentScheme<E> for UnivariateKzgPCS<E> {
     // Parameters
@@ -232,13 +245,13 @@ impl<E: PairingEngine> PolynomialCommitmentScheme<E> for UnivariateKzgPCS<E> {
     // This is a naive approach
     // TODO: to implement the more efficient batch verification algorithm
     // (e.g., the appendix C.4 in https://eprint.iacr.org/2020/1536.pdf)
-    fn batch_verify<R: RngCore + CryptoRng>(
+    fn batch_verify<I: IntoIterator<Item = E::Fr>>(
         verifier_param: &Self::VerifierParam,
         multi_commitment: &Self::BatchCommitment,
         points: &[Self::Point],
         values: &[E::Fr],
         batch_proof: &Self::BatchProof,
-        rng: &mut R,
+        randomizers: I,
     ) -> Result<bool, PCSError> {
         let check_time =
             start_timer!(|| format!("Checking {} evaluation proofs", multi_commitment.len()));
@@ -251,6 +264,9 @@ impl<E: PairingEngine> PolynomialCommitmentScheme<E> for UnivariateKzgPCS<E> {
         // Instead of multiplying g and gamma_g in each turn, we simply accumulate
         // their coefficients and perform a final multiplication at the end.
         let mut g_multiplier = E::Fr::zero();
+
+        let mut randomizers_iter = randomizers.into_iter();
+
         for (((c, z), v), proof) in multi_commitment
             .iter()
             .zip(points)
@@ -264,27 +280,97 @@ impl<E: PairingEngine> PolynomialCommitmentScheme<E> for UnivariateKzgPCS<E> {
             g_multiplier += &(randomizer * v);
             total_c += &c.mul(randomizer.into_repr());
             total_w += &w.mul(randomizer.into_repr());
-            // We don't need to sample randomizers from the full field,
-            // only from 128-bit strings.
-            randomizer = u128::rand(rng).into();
+            randomizer = randomizers_iter.next().ok_or(PCSError::InvalidParameters(
+                "Insufficient randomizers provided".to_string(),
+            ))?;
         }
+
         total_c -= &verifier_param.g.mul(g_multiplier);
         end_timer!(combination_time);
 
         let to_affine_time = start_timer!(|| "Converting results to affine for pairing");
         let affine_points = E::G1Projective::batch_normalization_into_affine(&[-total_w, total_c]);
-        let (total_w, total_c) = (affine_points[0], affine_points[1]);
         end_timer!(to_affine_time);
 
         let pairing_time = start_timer!(|| "Performing product of pairings");
-        let result = E::product_of_pairings(&[
-            (total_w.into(), verifier_param.beta_h.into()),
-            (total_c.into(), verifier_param.h.into()),
-        ])
+        let result = multi_pairing::<E>(
+            &affine_points[..],
+            &[verifier_param.beta_h, verifier_param.h],
+        )
         .is_one();
         end_timer!(pairing_time);
         end_timer!(check_time, || format!("Result: {result}"));
         Ok(result)
+    }
+
+    fn batch_verify_aggregated<
+        I: IntoIterator<Item = <E as CommitmentGroup>::Fr>,
+        const ARITY: usize,
+    >(
+        verifier_param: &Self::VerifierParam,
+        multi_commitment: &[ScalarsAndBases<E>],
+        points: [&[Self::Point]; ARITY],
+        values: &[<E as CommitmentGroup>::Fr],
+        batch_proof: [&Self::BatchProof; ARITY],
+        combiners: [&[E::Fr]; ARITY],
+        randomizers: I,
+    ) -> Result<bool, PCSError> {
+        // in this particular case, we need randomizers to be materialized, so we can apply the same
+        // sequence of them for each pipeline. This is hackish.
+        let seq_len = values.len();
+        let randomizers: Vec<_> = iter::once(E::Fr::one()) // we continue the convention that the initial randomizer is 1
+            .chain(randomizers.into_iter().take(seq_len - 1))
+            .collect::<Vec<_>>();
+        // sanity-check on the result of `take`
+        if randomizers.len() != seq_len {
+            return Err(PCSError::InvalidParameters(
+                "Insufficient randomizers provided".to_string(),
+            ));
+        }
+
+        // We compute the pipelined variant of the term total_w
+        let mut inners = ScalarsAndBases::<E>::new();
+        // Note: the combiners all have to be provided explicitly (even if the first one is 1)
+        for i in 0..ARITY {
+            for ((proof, combiner), r) in batch_proof[i].iter().zip(combiners[i]).zip(&randomizers)
+            {
+                inners.push(*r * combiner, proof.proof);
+            }
+        }
+        let inner = inners.multi_scalar_mul();
+        let mut g1_elems = vec![inner.into()];
+        let mut g2_elems = vec![verifier_param.beta_h];
+
+        // We now compute the pipelined variant of the term total_c
+        let mut inners = ScalarsAndBases::<E>::new();
+
+        // the hardest part to generalize, this is the `temp.add_assign_mixed(&c.0)` term above
+        for (commitment, randomizer) in multi_commitment.iter().zip(&randomizers) {
+            inners.merge(*randomizer, commitment);
+        }
+
+        // this is the regular part of the `total_c` computation
+        let mut sum_evals = E::Fr::zero();
+        for i in 0..ARITY {
+            for (((point, proof), combiner), r) in points[i]
+                .iter()
+                .zip(batch_proof[i])
+                .zip(combiners[i])
+                .zip(&randomizers)
+            {
+                inners.push(*r * combiner * point, proof.proof);
+            }
+        }
+        for (value, r) in values.iter().zip(&randomizers) {
+            sum_evals += *value * r;
+        }
+        inners.push(-sum_evals, verifier_param.g);
+        let inner = inners.multi_scalar_mul();
+        // enf of total_c computation
+
+        g1_elems.push(-inner.into());
+        g2_elems.push(verifier_param.h);
+        Ok(multi_pairing::<E>(&g1_elems, &g2_elems) == E::Fqk::one())
     }
 }
 
@@ -369,7 +455,7 @@ mod tests {
     where
         E: PairingEngine,
     {
-        let rng = &mut test_rng();
+        let mut rng = &mut test_rng();
         for _ in 0..10 {
             let mut degree = 0;
             while degree <= 1 {
@@ -396,7 +482,14 @@ mod tests {
                 proofs.push(proof);
             }
             assert!(UnivariateKzgPCS::<E>::batch_verify(
-                &vk, &comms, &points, &values, &proofs, rng
+                &vk,
+                &comms,
+                &points,
+                &values,
+                &proofs,
+                // We don't need to sample randomizers from the full field,
+                // only from 128-bit strings.
+                std::iter::from_fn(|| { Some(u128::rand(&mut rng).into()) })
             )?);
         }
         Ok(())
